@@ -78,6 +78,7 @@ foreach ($supportedSites as $site => $siteObj) {
 // Print rows
 echo "</tr>\n";
 foreach ($users as $name => $user) {
+	echo '<tr>';
 	echo "<td>$name</td><td>{$user['Total']}</td>";
 	foreach ($supportedSites as $site => $siteObj) {
 		echo '<td>';
@@ -92,3 +93,5 @@ foreach ($users as $name => $user) {
 }
 ?>
 </table>
+</body>
+</html>
