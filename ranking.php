@@ -47,7 +47,7 @@ $db = new PDO('sqlite:/home/pscadmin/psc-ranking/ranking.sqlite3');
 $users = array();
 $sql = 'SELECT name, site, username, solved FROM user, user_site WHERE user.id=user_site.user_id';
 foreach ($db->query($sql) as $row) {
-	if ($row['solved']) {
+	if ($row['solved'] !== null) {
 		$users[$row['name']][$row['site']] = array(
 			'solved' => $row['solved'],
 			'username' => $row['username'],
