@@ -33,17 +33,30 @@ def scrape_coj(usernames):
         update_solved('coj', username, solved)
 
 def scrape_kattis(usernames):
-    # We'll only get users who are listed as University of Calgary
-    req = urllib.request.Request('https://open.kattis.com/universities/ucalgary.ca')
     # Kattis seems to block urllib user agent
-    req.add_header('User-Agent', 'Mozilla/5.0 (X11; CrOS x86_64 8350.68.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36')
+    user_agent = 'Mozilla/5.0 (X11; CrOS x86_64 8350.68.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36'
+    usernames = set(usernames)
+
+    # First, get users who are listed as University of Calgary
+    # This reduces the number of requests needed
+    req = urllib.request.Request('https://open.kattis.com/universities/ucalgary.ca')
+    req.add_header('User-Agent', user_agent)
     tree = lxml.html.fromstring(urllib.request.urlopen(req).read())
     solved = tree.cssselect('.table-kattis tbody tr')
     for tr in solved:
         username = tr.cssselect('a')[0].get('href').split('/')[-1]
-        solved = float(tr.cssselect('td:last-child')[0].text)
+        score = float(tr.cssselect('td:last-child')[0].text)
         if username in usernames:
-            update_solved('kattis', username, solved)
+            update_solved('kattis', username, score)
+            usernames.remove(username)
+
+    # Then get other users
+    for username in usernames:
+        req = urllib.request.Request('https://open.kattis.com/users/%s' % username)
+        req.add_header('User-Agent', user_agent)
+        tree = lxml.html.fromstring(urllib.request.urlopen(req).read())
+        score = float(tree.cssselect('.rank tr:nth-child(2) td:nth-child(2)')[0].text)
+        update_solved('kattis', username, score)
 
 def scrape_poj(usernames):
     for username in usernames:
