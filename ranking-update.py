@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 import collections, functools, json, lxml.etree, lxml.html, sqlite3, urllib.request
 
 db = sqlite3.connect('/home/pscadmin/psc-ranking/ranking.sqlite3')
