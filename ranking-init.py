@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
-import sqlite3
+import collections, os, sqlite3
 
-db = sqlite3.connect('/home/pscadmin/psc-ranking/ranking.sqlite3')
+# This assumes that ranking.sqlite3 is in the same folder as this script.
+dir_path = os.path.dirname(os.path.realpath(__file__))
+db_path = os.path.join(dir_path + '/ranking.sqlite3')
+
+# Connect to database.
+db = sqlite3.connect(db_path)
 db.row_factory = sqlite3.Row
 
 def init_tier():
@@ -41,10 +46,36 @@ def init_site_score():
                'created_date DATETIME DEFAULT CURRENT_TIMESTAMP, '
                'PRIMARY KEY(user_id, site_id))')
 
+def seed_site():
+    Site = collections.namedtuple('Site', 'id name profile_url')
+    sites = [
+        Site(id=1, name='Caribbean Online Judge',
+            profile_url='http://coj.uci.cu/user/useraccount.xhtml?username=%s'),
+        Site(id=2, name='CodeChef', 
+            profile_url='https://www.codechef.com/users/%s'),
+        Site(id=3, name='Codeforces',
+            profile_url='http://www.codeforces.com/api/user.status?handle=%s'),
+        Site(id=4, name='ICPC Live Archive',
+            profile_url='https://open.kattis.com/users/%s'),
+        Site(id=5, name='Kattis',
+            profile_url='https://open.kattis.com/users/%s'),
+        Site(id=6, name='Peking Online Judge',
+            profile_url='http://poj.org/userstatus?user_id=%s'),
+        Site(id=7, name='Sphere Online Judge',
+            profile_url='http://www.spoj.com/users/%s/'),
+        Site(id=8, name='UVa Online Judge', 
+            profile_url='https://icpcarchive.ecs.baylor.edu/uhunt/api/solved-bits/%s'),
+    ]
+
+    for site in sites:
+        db.execute('INSERT INTO site (id, name, profile_url) VALUES (?,?,?)',
+                (site.id, site.name, site.profile_url))
+
 init_tier()
 init_user()
 init_site()
 init_site_account()
 init_site_score()
+seed_site()
 
 db.commit()
