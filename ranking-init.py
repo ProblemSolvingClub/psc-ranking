@@ -43,11 +43,11 @@ def init_site_account():
 
 def init_site_score():
     db.execute('CREATE TABLE IF NOT EXISTS site_score('
+               'id INTEGER PRIMARY KEY, '
                'user_id INTEGER NOT NULL, '
                'site_id INTEGER NOT NULL, '
                'solved INTEGER NOT NULL, '
-               'created_date DATETIME DEFAULT CURRENT_TIMESTAMP, '
-               'PRIMARY KEY(user_id, site_id))')
+               'created_date DATETIME DEFAULT CURRENT_TIMESTAMP)')
 
 def seed_tier():
     Tier = collections.namedtuple('Tier', 'id name minimum_score')
