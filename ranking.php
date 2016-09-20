@@ -1,97 +1,62 @@
-<!doctype html>
-<html>
-<head>
-<title>PSC Ranking System</title>
-</head>
-<body>
-<h1>PSC Ranking System</h1>
-<table border="1">
 <?php
+// Set content type to json.
+header('Content-type: application/json');
 ini_set('display_errors', 'On');
-$supportedSites = array(
-	'coj' => array(
-		'name' => 'Caribbean Online Judge',
-		'url' => 'http://coj.uci.cu/user/useraccount.xhtml?username=%s'
-	),
-	'codechef' => array(
-		'name' => 'CodeChef',
-		'url' => 'https://www.codechef.com/users/%s'
-	),
-	'codeforces' => array(
-		'name' => 'Codeforces',
-		'url' => 'http://www.codeforces.com/profile/%s'
-	),
-	'icpcarchive' => array(
-		'name' => 'ICPC Live Archive',
-		'url' => 'https://icpcarchive.ecs.baylor.edu/uhunt/id/%s',
-	),
-	'kattis' => array(
-		'name' => 'Kattis',
-		'url' => 'https://open.kattis.com/users/%s'
-	),
-	'poj' => array(
-		'name' => 'Peking Online Judge',
-		'url' => 'http://poj.org/userstatus?user_id=%s'
-	),
-	'spoj' => array(
-		'name' => 'Sphere Online Judge',
-		'url' => 'http://www.spoj.com/users/%s'
-	),
-	'uva' => array(
-		'name' => 'UVa Online Judge',
-		'url' => 'http://uhunt.felix-halim.net/id/%s'
-	),
-);
-$db = new PDO('sqlite:/home/pscadmin/psc-ranking/ranking.sqlite3');
 
+//$db = new PDO('sqlite:/home/pscadmin/psc-ranking/ranking.sqlite3');
+$db = new PDO('sqlite:/Users/jan/dev/psc-ranking/ranking.sqlite3');
+
+// Users with scores.
+// [ { id, firstName, lastName, totalSolved, siteSolved: [{siteId: solved}] } ]
 $users = array();
-$sql = 'SELECT name, site, username, solved FROM user, user_site WHERE user.id=user_site.user_id';
-foreach ($db->query($sql) as $row) {
-	if ($row['solved'] !== null) {
-		$users[$row['name']][$row['site']] = array(
-			'solved' => $row['solved'],
-			'username' => $row['username'],
-		);
-		if (!isset($users[$row['name']]['Total'])) $users[$row['name']]['Total'] = 0;
-		$users[$row['name']]['Total'] += $row['solved'];
-	}
-}
-// Sort by reverse order of Total
-uasort($users, function($a, $b) {
-	$av = $a['Total'];
-	$bv = $b['Total'];
-	if ($av > $bv) return -1;
-	elseif ($av == $bv) return 0;
-	else return 1;
-});
+$users_sql = 'SELECT id, first_name, last_name FROM user';
+// TODO: Get score using sql. Latest solved - Initial solved per site.
+$site_solved_sql = 'SELECT solved, created_date FROM site_score WHERE user_id=';
+foreach ($db->query($users_sql) as $row) {
+    $total_solved = 0;
+    // TODO: Get actual score. latest score - beginning score for site
+    $site_solved = array(); // { site_id: num_solved_this_semester }
+    foreach($db->query($site_solved_sql . $row['id']) as $solved_row) {
+        $site_solved
+    }
 
-#CREATE TABLE user_site(user_id integer, site text, username text, solved integer, updated_time integer, primary key(user_id, site));
-#CREATE TABLE user(id integer primary key, name text);
-
-// Print header
-echo '<tr><th>Name</th><th>Total</th>';
-foreach ($supportedSites as $site => $siteObj) {
-	// Use small width to compress.
-	echo "<th style='width:1px;'>{$siteObj['name']}</th>";
+    $users[] = array(
+        'id' => $row['id'],
+        'firstName' => $row['first_name'],
+        'lastName' => $row['last_name'],
+        'totalSolved' => $total_solved,
+        'siteSolved' => $site_solved
+    );
 }
 
-// Print rows
-echo "</tr>\n";
-foreach ($users as $name => $user) {
-	echo '<tr>';
-	echo "<td>$name</td><td>{$user['Total']}</td>";
-	foreach ($supportedSites as $site => $siteObj) {
-		echo '<td>';
-		if (isset($user[$site])) {
-			$url = sprintf($siteObj['url'], $user[$site]['username']);
-			$solved = $user[$site]['solved'];
-			echo "<a target='_blank' href='$url'>$solved</a>";
-		}
-		echo '</td>';
-	}
-	echo "</tr>\n";
+// Sites.
+$sites = array();
+$sites_sql = 'SELECT id, name, profile_url FROM site';
+foreach ($db->query($sites_sql) as $row) {
+    $sites[] = array(
+        'id' => $row['id'],
+        'name' => $row['name'],
+        'profileUrl' => $row['profile_url']
+    );
 }
+
+// Tiers.
+$tiers = array();
+$tiers_sql = 'SELECT id, name, minimum_score FROM tier';
+foreach ($db->query($tiers_sql) as $row) {
+    $tiers[] = array(
+        'id' => $row['id'],
+        'name' => $row['name'],
+        'minimumScore' => $row['minimum_score']
+    );
+}
+
+// Final json object.
+$json_info = array(
+    'users' => $users,
+    'sites' => $sites,
+    'tiers' => $tiers
+);
+
+echo json_encode($json_info);
 ?>
-</table>
-</body>
-</html>
