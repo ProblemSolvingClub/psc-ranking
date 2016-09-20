@@ -3,8 +3,7 @@
 header('Content-type: application/json');
 ini_set('display_errors', 'On');
 
-//$db = new PDO('sqlite:/home/pscadmin/psc-ranking/ranking.sqlite3');
-$db = new PDO('sqlite:/Users/jan/dev/psc-ranking/ranking.sqlite3');
+$db = new PDO('sqlite:/home/pscadmin/psc-ranking/ranking.sqlite3');
 
 // Users with scores.
 // [ { id, firstName, lastName, totalSolved, siteSolved: [{siteId: solved}] } ]
