@@ -6,7 +6,7 @@ ini_set('display_errors', 'On');
 $db = new PDO('sqlite:/home/pscadmin/psc-ranking/ranking.sqlite3');
 
 // TODO: Consider putting in a database.
-$semesterStartDate = '2016-09-15';
+$semesterStartDate = '2016-09-20';
 
 // Sites.
 $sites = array();
