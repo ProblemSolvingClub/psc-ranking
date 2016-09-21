@@ -71,7 +71,7 @@ foreach ($db->query($users_sql) as $row) {
         // Score is just the difference between latest #solved and oldest #solved.
         $site_score = $site_solved_newest - $site_solved_oldest;
         // Ensure that it doesn't go below 0 e.g. Kattis problem point value drops.
-        $site_solved[$site['id']] = $site_score < 0.0 ? 0.0 : $site_score;
+        $site_solved[$site['id']] = $site_score;
         $total_solved += $site_score;
     }
 
