@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import collections, functools, json, lxml.etree, lxml.html, os, sqlite3, urllib.request
+import collections, functools, json, lxml.etree, lxml.html, os, sqlite3, traceback, urllib.request
 
 # This assumes that ranking.sqlite3 is in the same folder as this script.
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -13,10 +13,13 @@ def update_solved(site_id, user_id, solved):
     db.execute('INSERT INTO site_score (user_id, site_id, solved) VALUES (?, ?, ?)', 
             (int(user_id), int(site_id), solved))
 
+def get_http(url):
+    return urllib.request.urlopen(url, timeout=10).read() # 10 second timeout
+
 def scrape_codeforces(site_id, username_userid):
     # I don't see a better way than scanning all submissions of the user
     for username in username_userid.keys():
-        body_bytes = urllib.request.urlopen('http://www.codeforces.com/api/user.status?handle=%s' % username).read()
+        body_bytes = get_http('http://www.codeforces.com/api/user.status?handle=%s' % username)
         doc = json.loads(body_bytes.decode('utf-8'))
         solved = set()
         for obj in doc['result']:
@@ -26,15 +29,13 @@ def scrape_codeforces(site_id, username_userid):
 
 def scrape_codechef(site_id, username_userid):
     for username in username_userid.keys():
-        req = urllib.request.Request('https://www.codechef.com/users/%s' % username)
-        tree = lxml.html.fromstring(urllib.request.urlopen(req).read())
+        tree = lxml.html.fromstring(get_http('https://www.codechef.com/users/%s' % username))
         solved = tree.cssselect("#problem_stats tr:nth-child(2) td")[0].text
         update_solved(site_id, username_userid[username], solved)
 
 def scrape_coj(site_id, username_userid):
     for username in username_userid.keys():
-        req = urllib.request.Request('http://coj.uci.cu/user/useraccount.xhtml?username=%s' % username)
-        tree = lxml.html.fromstring(urllib.request.urlopen(req).read())
+        tree = lxml.html.fromstring(get_http('http://coj.uci.cu/user/useraccount.xhtml?username=%s' % username))
         solved = tree.cssselect("div.panel-heading:contains('Solved problems') span.badge")[0].text
         update_solved(site_id, username_userid[username], solved)
 
@@ -46,7 +47,7 @@ def scrape_kattis(site_id, username_userid):
     # This reduces the number of requests needed
     req = urllib.request.Request('https://open.kattis.com/universities/ucalgary.ca')
     req.add_header('User-Agent', user_agent)
-    tree = lxml.html.fromstring(urllib.request.urlopen(req).read())
+    tree = lxml.html.fromstring(get_http(req))
     solved = tree.cssselect('.table-kattis tbody tr')
     for tr in solved:
         username = tr.cssselect('a')[0].get('href').split('/')[-1]
@@ -59,27 +60,25 @@ def scrape_kattis(site_id, username_userid):
     for username in username_userid.keys():
         req = urllib.request.Request('https://open.kattis.com/users/%s' % username)
         req.add_header('User-Agent', user_agent)
-        tree = lxml.html.fromstring(urllib.request.urlopen(req).read())
+        tree = lxml.html.fromstring(get_http(req))
         score = float(tree.cssselect('.rank tr:nth-child(2) td:nth-child(2)')[0].text)
         update_solved(site_id, username_userid[username], score)
 
 def scrape_poj(site_id, username_userid):
     for username in username_userid.keys():
-        req = urllib.request.Request('http://poj.org/userstatus?user_id=%s' % username)
-        tree = lxml.html.fromstring(urllib.request.urlopen(req).read())
+        tree = lxml.html.fromstring(get_http('http://poj.org/userstatus?user_id=%s' % username))
         solved = tree.cssselect("tr:contains('Solved:') a")[0].text
         update_solved(site_id, username_userid[username], solved)
 
 def scrape_spoj(site_id, username_userid):
     for username in username_userid.keys():
-        req = urllib.request.Request('http://www.spoj.com/users/%s/' % username)
-        tree = lxml.html.fromstring(urllib.request.urlopen(req).read())
+        tree = lxml.html.fromstring(get_http('http://www.spoj.com/users/%s/' % username))
         solved = tree.cssselect('.profile-info-data-stats dd')[0].text
         update_solved(site_id, username_userid[username], solved)
 
 def scrape_uva(base_url, site_id, username_userid):
     # uhunt has a weird API where it returns a list of bitsets of solved problems
-    body_bytes = urllib.request.urlopen('%s/api/solved-bits/%s' % (base_url, ','.join(username_userid.keys()))).read()
+    body_bytes = get_http('%s/api/solved-bits/%s' % (base_url, ','.join(username_userid.keys())))
     doc = json.loads(body_bytes.decode('utf-8'))
     for obj in doc:
         count = 0
@@ -106,6 +105,10 @@ for site in supported_sites:
     username_userid = {}
     for row in db.execute('SELECT user_id, username FROM site_account WHERE site_id=?', (site.id,)):
         username_userid[str(row['username'])] = row['user_id']
-    site.scrape_func(site.id, username_userid)
+    try:
+        site.scrape_func(site.id, username_userid)
+    except:
+        exc = traceback.format_exc()
+        print(exc) # TODO: email the error or something
 
 db.commit()
