@@ -4,7 +4,6 @@ header('Content-type: application/json');
 ini_set('display_errors', 'On');
 
 $db = new PDO('sqlite:/home/pscadmin/psc-ranking/ranking.sqlite3');
-//$db = new PDO('sqlite:/Users/Jan/dev/psc-ranking/ranking.sqlite3');
 
 // TODO: Consider putting in a database.
 $semesterStartDate = '2016-09-15';
@@ -71,10 +70,8 @@ foreach ($db->query($users_sql) as $row) {
         
         // Score is just the difference between latest #solved and oldest #solved.
         $site_score = $site_solved_newest - $site_solved_oldest;
-        $site_solved[] = array(
-            // Ensure that it doesn't go below 0 e.g. Kattis problem point value drops.
-            $site['id'] => $site_score < 0.0 ? 0.0 : $site_score,
-        );
+        // Ensure that it doesn't go below 0 e.g. Kattis problem point value drops.
+        $site_solved[$site['id']] = $site_score < 0.0 ? 0.0 : $site_score;
         $total_solved += $site_score;
     }
 
