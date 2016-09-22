@@ -24,6 +24,7 @@ def init_user():
                'id INTEGER PRIMARY KEY, '
                'first_name TEXT NOT NULL, '
                'last_name TEXT NOT NULL, '
+               'unofficial INTEGER NOT NULL DEFAULT 0, '
                'created_date DATETIME DEFAULT CURRENT_TIMESTAMP)')
 
 def init_site():
@@ -44,8 +45,8 @@ def init_site_account():
 def init_site_score():
     db.execute('CREATE TABLE IF NOT EXISTS site_score('
                'id INTEGER PRIMARY KEY, '
-               'user_id INTEGER NOT NULL, '
                'site_id INTEGER NOT NULL, '
+               'username TEXT NOT NULL, '
                'solved INTEGER NOT NULL, '
                'created_date DATETIME DEFAULT CURRENT_TIMESTAMP)')
 
@@ -71,9 +72,9 @@ def seed_site():
             Site(id=2, name='CodeChef', 
                 profile_url='https://www.codechef.com/users/%s'),
             Site(id=3, name='Codeforces',
-                profile_url='http://www.codeforces.com/api/user.status?handle=%s'),
+                profile_url='http://www.codeforces.com/profile/%s'),
             Site(id=4, name='ICPC Live Archive',
-                profile_url='https://open.kattis.com/users/%s'),
+                profile_url='https://icpcarchive.ecs.baylor.edu/uhunt/id/%s'),
             Site(id=5, name='Kattis',
                 profile_url='https://open.kattis.com/users/%s'),
             Site(id=6, name='Peking Online Judge',
@@ -81,7 +82,7 @@ def seed_site():
             Site(id=7, name='Sphere Online Judge',
                 profile_url='http://www.spoj.com/users/%s/'),
             Site(id=8, name='UVa Online Judge', 
-                profile_url='https://icpcarchive.ecs.baylor.edu/uhunt/api/solved-bits/%s'),
+                profile_url='http://uhunt.felix-halim.net/id/%s'),
             ]
 
     for site in sites:

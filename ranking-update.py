@@ -9,9 +9,11 @@ db_path = os.path.join(dir_path + '/ranking.sqlite3')
 db = sqlite3.connect(db_path)
 db.row_factory = sqlite3.Row
 
-def update_solved(site_id, user_id, solved):
-    db.execute('INSERT INTO site_score (user_id, site_id, solved) VALUES (?, ?, ?)', 
-            (int(user_id), int(site_id), solved))
+def update_solved(site_id, username, solved):
+    cursor = db.execute('INSERT INTO site_score (site_id, username, solved) VALUES (?, ?, ?)', 
+            (int(site_id), username, solved))
+    if cursor.rowcount == 0:
+        raise RuntimeError('Failed to update solved %s %s %s' % (site_id, username, solved))
 
 def get_http(url):
     return urllib.request.urlopen(url, timeout=10).read() # 10 second timeout
@@ -25,19 +27,19 @@ def scrape_codeforces(site_id, username_userid):
         for obj in doc['result']:
             # I'm assuming that (contestId, index) is a unique identifier for the problem
             if obj['verdict'] == 'OK': solved.add((obj['problem']['contestId'], obj['problem']['index']))
-        update_solved(site_id, username_userid[username], len(solved))
+        update_solved(site_id, username, len(solved))
 
 def scrape_codechef(site_id, username_userid):
     for username in username_userid.keys():
         tree = lxml.html.fromstring(get_http('https://www.codechef.com/users/%s' % username))
         solved = tree.cssselect("#problem_stats tr:nth-child(2) td")[0].text
-        update_solved(site_id, username_userid[username], solved)
+        update_solved(site_id, username, solved)
 
 def scrape_coj(site_id, username_userid):
     for username in username_userid.keys():
         tree = lxml.html.fromstring(get_http('http://coj.uci.cu/user/useraccount.xhtml?username=%s' % username))
         solved = tree.cssselect("div.panel-heading:contains('Solved problems') span.badge")[0].text
-        update_solved(site_id, username_userid[username], solved)
+        update_solved(site_id, username, solved)
 
 def scrape_kattis(site_id, username_userid):
     # Kattis seems to block urllib user agent
@@ -53,7 +55,7 @@ def scrape_kattis(site_id, username_userid):
         username = tr.cssselect('a')[0].get('href').split('/')[-1]
         score = float(tr.cssselect('td:last-child')[0].text)
         if username in username_userid.keys():
-            update_solved(site_id, username_userid[username], score)
+            update_solved(site_id, username, score)
             username_userid.pop(username)
 
     # Then get other users
@@ -62,19 +64,19 @@ def scrape_kattis(site_id, username_userid):
         req.add_header('User-Agent', user_agent)
         tree = lxml.html.fromstring(get_http(req))
         score = float(tree.cssselect('.rank tr:nth-child(2) td:nth-child(2)')[0].text)
-        update_solved(site_id, username_userid[username], score)
+        update_solved(site_id, username, score)
 
 def scrape_poj(site_id, username_userid):
     for username in username_userid.keys():
         tree = lxml.html.fromstring(get_http('http://poj.org/userstatus?user_id=%s' % username))
         solved = tree.cssselect("tr:contains('Solved:') a")[0].text
-        update_solved(site_id, username_userid[username], solved)
+        update_solved(site_id, username, solved)
 
 def scrape_spoj(site_id, username_userid):
     for username in username_userid.keys():
         tree = lxml.html.fromstring(get_http('http://www.spoj.com/users/%s/' % username))
         solved = tree.cssselect('.profile-info-data-stats dd')[0].text
-        update_solved(site_id, username_userid[username], solved)
+        update_solved(site_id, username, solved)
 
 def scrape_uva(base_url, site_id, username_userid):
     # uhunt has a weird API where it returns a list of bitsets of solved problems
@@ -86,7 +88,7 @@ def scrape_uva(base_url, site_id, username_userid):
             while bs:
                 if bs & 1: count += 1
                 bs >>= 1
-        update_solved(site_id, username_userid[str(obj['uid'])], count)
+        update_solved(site_id, str(obj['uid']), count)
 
 SupportedSite = collections.namedtuple('SupportedSite', 'id name scrape_func')
 supported_sites = [

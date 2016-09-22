@@ -33,7 +33,7 @@ foreach ($db->query($tiers_sql) as $row) {
 // Users with scores.
 // [ { id, firstName, lastName, totalSolved, siteSolved: [{siteId: solved}] } ]
 $users = array();
-$users_sql = 'SELECT id, first_name, last_name FROM user';
+$users_sql = 'SELECT id, first_name, last_name FROM user WHERE NOT unofficial';
 
 // Get all user IDs.
 foreach ($db->query($users_sql) as $row) {
@@ -47,7 +47,7 @@ foreach ($db->query($users_sql) as $row) {
         $site_solved_oldest_sql = "
             SELECT solved
             FROM site_score 
-            WHERE site_id={$site['id']} AND user_id={$user_id} AND created_date > {$semesterStartDate}
+            WHERE site_id={$site['id']} AND username=(SELECT username FROM site_account where user_id={$user_id} and site_id={$site['id']}) AND created_date > {$semesterStartDate}
             ORDER BY created_date ASC
             LIMIT 1";
 
@@ -60,7 +60,7 @@ foreach ($db->query($users_sql) as $row) {
         $site_solved_newest_sql = " 
             SELECT solved
             FROM site_score 
-            WHERE site_id={$site['id']} AND user_id={$user_id} AND created_date > {$semesterStartDate}
+            WHERE site_id={$site['id']} AND username=(SELECT username FROM site_account where user_id={$user_id} and site_id={$site['id']}) AND created_date > {$semesterStartDate}
             ORDER BY created_date DESC
             LIMIT 1";
 
@@ -70,7 +70,12 @@ foreach ($db->query($users_sql) as $row) {
         
         // Score is just the difference between latest #solved and oldest #solved.
         $site_score = $site_solved_newest - $site_solved_oldest;
-        // Ensure that it doesn't go below 0 e.g. Kattis problem point value drops.
+
+	// Special handling for Kattis (divide by 2 and round up for now).
+	if ($site['id'] == 5) {
+		$site_score = round(0.5 * $site_score);
+	}
+
         $site_solved[$site['id']] = $site_score;
         $total_solved += $site_score;
     }
