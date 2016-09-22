@@ -52,11 +52,11 @@ def init_site_score():
 def seed_tier():
     Tier = collections.namedtuple('Tier', 'id name minimum_score')
     tiers = [
-                Tier(id=1, name='Bronze', minimum_score=0),
-                Tier(id=2, name='Silver', minimum_score=5),
-                Tier(id=3, name='Gold', minimum_score=15),
-                Tier(id=4, name='Platinum', minimum_score=30),
-                Tier(id=5, name='Diamond', minimum_score=40)
+                Tier(id=1, name='Bits', minimum_score=0),
+                Tier(id=2, name='Bytes', minimum_score=5),
+                Tier(id=3, name='Floats', minimum_score=15),
+                Tier(id=4, name='Ints', minimum_score=30),
+                Tier(id=5, name='Doubles', minimum_score=40)
             ]
 
     for tier in tiers:
