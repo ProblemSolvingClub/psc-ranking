@@ -34,6 +34,9 @@ foreach ($db->query($tiers_sql) as $row) {
 // [ { id, firstName, lastName, totalSolved, siteSolved: [{siteId: solved}] } ]
 $users = array();
 $users_sql = 'SELECT id, first_name, last_name FROM user WHERE NOT unofficial';
+$site_solved_all_sth = $db->prepare("SELECT solved FROM site_score WHERE site_id=? AND username=? AND created_date > '{$semesterStartDate}' ORDER BY created_date ASC");
+$site_solved_before_sth = $db->prepare("SELECT solved FROM site_score WHERE site_id=? AND username=? AND created_date < '{$semesterStartDate}' ORDER BY created_date DESC LIMIT 1");
+$site_solved_oldest_sth = $db->prepare("SELECT solved FROM site_score WHERE site_id=? AND username=? ORDER BY created_date ASC LIMIT 1");
 
 // Get all user IDs.
 foreach ($db->query($users_sql) as $row) {
@@ -42,44 +45,43 @@ foreach ($db->query($users_sql) as $row) {
     $site_solved = array(); // { site_id: num_solved_this_semester }
 
     foreach($sites as $site) {
-        // Get newest site_score row for this user and site that is before $semesterStartDate.
-        // If we never scraped user before semesterStartDate, this will put them at zero.
-        // Will probably need to add some override for this.
-        $site_solved_oldest = 0;
-        $site_solved_oldest_sql = "
-            SELECT solved
-            FROM site_score 
-            WHERE site_id={$site['id']} AND username=(SELECT username FROM site_account where user_id={$user_id} and site_id={$site['id']}) AND created_date < '{$semesterStartDate}'
-            ORDER BY created_date DESC
-            LIMIT 1";
+        // Get all usernames for the user and site.
+        $usernames_sql = "SELECT username FROM site_account where user_id={$user_id} and site_id={$site['id']}";
+        foreach ($db->query($usernames_sql) as $username_row) {
+            $username = $username_row['username'];
 
-        foreach($db->query($site_solved_oldest_sql) as $site_solved_old_row) {
-            $site_solved_oldest = $site_solved_old_row['solved'];
+            // Get newest site_score row for this user and site that is before $semesterStartDate.
+            $last_solved = 0;
+            $site_solved_before_sth->execute(array($site['id'], $username));
+            if ($site_solved_before_row = $site_solved_before_sth->fetch()) {
+                $last_solved = $site_solved_before_row['solved'];
+            } else {
+                // If we never scraped user before semesterStartDate, we will allow them at most 5 more than the lowest score we have.
+                $site_solved_oldest_sth->execute(array($site['id'], $username));
+                if ($site_solved_oldest_row = $site_solved_oldest_sth->fetch()) {
+                    $last_solved = max(0, $site_solved_oldest_row['solved'] - 5);
+                }
+            }
+
+            // Get all scores after $semesterStartDate.
+            $site_solved_all_sth->execute(array($site['id'], $username));
+            foreach ($site_solved_all_sth as $solved_row) {
+                // Find number solved in the interval.
+                $solved = max(0, $solved_row['solved'] - $last_solved);
+
+                // Special handling for Kattis (divide by 2 and round for now).
+                if ($site['id'] == 5) {
+                    $solved = round(0.5 * $solved);
+                }
+
+                if (!isset($site_solved[$site['id']])) {
+                    $site_solved[$site['id']] = 0;
+                }
+                $site_solved[$site['id']] += $solved;
+                $total_solved += $solved;
+                $last_solved = $solved_row['solved'];
+            }
         }
-
-        // Get newest site_score row for this user and site that is after $semesterStartDate.
-        $site_solved_newest = 0;
-        $site_solved_newest_sql = " 
-            SELECT solved
-            FROM site_score 
-            WHERE site_id={$site['id']} AND username=(SELECT username FROM site_account where user_id={$user_id} and site_id={$site['id']}) AND created_date > '{$semesterStartDate}'
-            ORDER BY created_date DESC
-            LIMIT 1";
-
-        foreach($db->query($site_solved_newest_sql) as $site_solved_new_row) {
-            $site_solved_newest = $site_solved_new_row['solved'];
-        }
-        
-        // Score is just the difference between latest #solved and oldest #solved.
-        $site_score = $site_solved_newest - $site_solved_oldest;
-
-        // Special handling for Kattis (divide by 2 and round for now).
-        if ($site['id'] == 5) {
-                $site_score = round(0.5 * $site_score);
-        }
-
-        $site_solved[$site['id']] = $site_score;
-        $total_solved += $site_score;
     }
 
     $users[] = array(

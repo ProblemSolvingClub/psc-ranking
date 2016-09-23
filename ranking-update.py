@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import collections, functools, json, lxml.etree, lxml.html, os, sqlite3, traceback, urllib.request
+import collections, functools, json, logging, lxml.html, os, sqlite3, traceback, urllib.error, urllib.request
 
 # This assumes that ranking.sqlite3 is in the same folder as this script.
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -62,9 +62,12 @@ def scrape_kattis(site_id, username_userid):
     for username in username_userid.keys():
         req = urllib.request.Request('https://open.kattis.com/users/%s' % username)
         req.add_header('User-Agent', user_agent)
-        tree = lxml.html.fromstring(get_http(req))
-        score = float(tree.cssselect('.rank tr:nth-child(2) td:nth-child(2)')[0].text)
-        update_solved(site_id, username, score)
+        try:
+            tree = lxml.html.fromstring(get_http(req))
+            score = float(tree.cssselect('.rank tr:nth-child(2) td:nth-child(2)')[0].text)
+            update_solved(site_id, username, score)
+        except urllib.error.HTTPError:
+            logging.exception('Failed to fetch Kattis user "%s"', username)
 
 def scrape_poj(site_id, username_userid):
     for username in username_userid.keys():
@@ -110,7 +113,6 @@ for site in supported_sites:
     try:
         site.scrape_func(site.id, username_userid)
     except:
-        exc = traceback.format_exc()
-        print(exc) # TODO: email the error or something
+        logging.exception('Fatal error occured while scraping %s', site.name)
 
 db.commit()
