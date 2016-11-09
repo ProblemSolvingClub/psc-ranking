@@ -1,5 +1,7 @@
 <?php
 ini_set('display_errors', 'On');
+define('IN_PSC_RANKING_ADMIN', true);
+date_default_timezone_set('America/Edmonton');
 
 $db = new PDO('sqlite:/home/pscadmin/psc-ranking/ranking.sqlite3');
 
@@ -13,7 +15,8 @@ foreach ($db->query($sites_sql) as $row) {
 function action_add_account() {
 	global $db, $status_message;
 	if (!(isset($_POST['user_id']) && isset($_POST['site_id']) && isset($_POST['username']))) {
-		die('Insufficent parameters');
+		$status_message = 'Insufficent parameters';
+		return;
 	}
 	$user_id = $_POST['user_id'];
 	$site_id = $_POST['site_id'];
@@ -29,10 +32,35 @@ function action_add_account() {
 	}
 }
 
+function action_add_meeting() {
+	global $db, $status_message;
+	if (!(isset($_POST['date'])) || !preg_match('/^[0-9]{4}\-[0-9]{2}\-[0-9]{2}$/', $_POST['date'])) {
+		$status_message = 'Invalid date.';
+		return;
+	}
+	$kattis_contest_id = null;
+	if (isset($_POST['kattis_contest_id']) && !empty($_POST['kattis_contest_id'])) {
+		$kattis_contest_id = $_POST['kattis_contest_id'];
+		if (!preg_match('/^[a-z0-9]+$/', $kattis_contest_id)) {
+			$status_message = 'Invalid Kattis contest ID.';
+			return;
+		}
+	}
+
+	// Insert data
+	$sth = $db->prepare('INSERT INTO meeting (date, kattis_contest_id) VALUES (?, ?)');
+	if ($sth->execute(array($_POST['date'], $kattis_contest_id))) {
+		$status_message = 'Meeting added successfully.';
+	} else {
+		$status_message = 'Unable to add meeting.';
+	}
+}
+
 function action_add_user() {
 	global $db, $status_message;
 	if (!(isset($_POST['first_name']) && isset($_POST['last_name']))) {
-		die('Insufficent parameters');
+		$status_message = 'Insufficent parameters';
+		return;
 	}
 	$first_name = trim($_POST['first_name']);
 	$last_name = trim($_POST['last_name']);
@@ -50,7 +78,8 @@ function action_add_user() {
 function action_toggle_unofficial() {
 	global $db, $status_message;
 	if (!isset($_POST['user_id'])) {
-		die('Insufficent parameters');
+		$status_message = 'Insufficent parameters';
+		return;
 	}
 	$user_id = $_POST['user_id'];
 
@@ -63,16 +92,46 @@ function action_toggle_unofficial() {
 	}
 }
 
+function action_update_meeting_attendance() {
+	global $db, $status_message;
+	if (!isset($_POST['meeting_id'])) {
+		$status_message = 'Insufficent parameters';
+		return;
+	}
+	$meeting_id = $_POST['meeting_id'];
+
+	// First, delete all existing attendance
+	$sth = $db->prepare('DELETE FROM meeting_attended WHERE meeting_id=?');
+	if (!$sth->execute(array($meeting_id))) {
+		$status_message = 'Unable to delete all existing attendance.';
+		return;
+	}
+
+	// Next, insert al new attendance
+	$sth = $db->prepare('INSERT INTO meeting_attended (meeting_id, user_id) VALUES (?,?)');
+	foreach ($_POST as $user_id => $val) {
+		if (preg_match('/^[0-9]+$/', $user_id) && !empty($val)) {
+			if (!$sth->execute(array($meeting_id, $user_id))) {
+				$status_message = 'Unexpected error updating attendance.';
+				return;
+			}
+		}
+	}
+	$status_message = 'Attendance updated successfully.';
+}
+
 if (isset($_POST['action'])) {
 	if ($_POST['action'] == 'add_account') action_add_account();
+	elseif ($_POST['action'] == 'add_meeting') action_add_meeting();
 	elseif ($_POST['action'] == 'add_user') action_add_user();
 	elseif ($_POST['action'] == 'toggle_unofficial') action_toggle_unofficial();
+	elseif ($_POST['action'] == 'update_meeting_attendance') action_update_meeting_attendance();
 	else $status_message = 'Invalid action.';
 }
 
 // Users with scores.
 // [ { id, firstName, lastName, totalSolved, siteSolved: [{siteId: solved}] } ]
-$users_sql = 'SELECT id, first_name, last_name, unofficial FROM user';
+$users_sql = 'SELECT id, first_name, last_name, unofficial, (SELECT COUNT(*) FROM meeting_attended WHERE user_id=id) AS meeting_count, (SELECT COUNT(*) FROM kattis_contest_solved WHERE kattis_username IN (SELECT username FROM site_account WHERE site_id=5 AND user_id=id)) AS bonus_count FROM user';
 $users = $db->query($users_sql)->fetchAll();
 // Sort by reverse order of Total
 uasort($users, function($a, $b) {
@@ -101,88 +160,13 @@ if (isset($status_message)) {
 	echo "<div style=\"padding: 5px; border: 3px inset green;\">$status_message</div>";
 }
 ?>
-<h1>PSC Ranking Admin</h1>
-<h2>Add User</h2>
-<form method="post">
-<input type="hidden" name="action" value="add_user">
-<label>First name: <input type="text" name="first_name"></label><br>
-<label>Last name: <input type="text" name="last_name"></label><br>
-<input type="submit" value="Add User">
-</form>
-<h2>Add Account</h2>
-<form method="post">
-<input type="hidden" name="action" value="add_account">
-<label>User: <select name="user_id">
+<h1><a href="ranking-admin.php">PSC Ranking Admin</a></h1>
 <?php
-foreach ($users as $user) {
-	echo "<option value=\"{$user['id']}\">{$user['first_name']} {$user['last_name']}</option>\n";
+if (isset($_GET['meeting_id'])) {
+	require('ranking-admin-meeting.php');
+} else {
+	require('ranking-admin-main.php');
 }
 ?>
-</select></label><br>
-<label>Site: <select name="site_id">
-<?php
-foreach ($sites as $site_id => $site) {
-	echo "<option value=\"$site_id\">{$site['name']}</option>\n";
-}
-?>
-</select></label><br>
-<label>Username: <input type="text" name="username"></label><br>
-<input type="submit" value="Add User">
-</form>
-<h2>Toggle Unofficial</h2>
-<form method="post">
-<input type="hidden" name="action" value="toggle_unofficial">
-<label>User: <select name="user_id">
-<?php
-foreach ($users as $user) {
-	echo "<option value=\"{$user['id']}\">{$user['first_name']} {$user['last_name']}</option>\n";
-}
-?>
-</select></label>
-<input type="submit" value="Toggle Unofficial">
-</form>
-<h2>User List</h2>
-<table border="1">
-<tr><th>Name</th><th>Website</th><th>Username</th><th>Solved</th><th>Last Updated (UTC)</th></tr>
-<?php
-$sites_sth = $db->prepare('SELECT site_id, username FROM site_account WHERE user_id=?');
-$score_sth = $db->prepare('SELECT solved, created_date FROM site_score WHERE site_id=? AND username=? ORDER BY created_date DESC LIMIT 1');
-foreach ($users as $user) {
-	$sites_sth->execute(array($user['id']));
-	$accounts = $sites_sth->fetchAll();
-	uasort($accounts, function($a, $b) use ($sites) {
-		$av = $sites[$a['site_id']]['name'];
-		$bv = $sites[$b['site_id']]['name'];
-		if ($av < $bv) return -1;
-		elseif ($av == $bv) return 0;
-		else return 1;
-	});
-	echo "<tr><td rowspan=" . count($accounts) . ">{$user['first_name']} {$user['last_name']}";
-	if ($user['unofficial']) echo '<br>(Unofficial)</br>';
-	echo "</td>\n";
-	$first = true;
-	foreach ($accounts as $account) {
-		$solved = '';
-		$last_updated = 'Never';
-		$score_sth->execute(array($account['site_id'], $account['username']));
-		$score = $score_sth->fetch();
-		if ($score) {
-			$solved = $score['solved'];
-			$last_updated = $score['created_date'];
-		}
-
-		if (!$first) echo "<tr>";
-		$first = false;
-		$site = $sites[$account['site_id']];
-		$url = sprintf($site['profile_url'], $account['username']);
-		echo "<td>{$site['name']}</td>";
-		echo "<td><a target=\"_blank\" href=\"$url\">{$account['username']}</a></td>";
-		echo "<td>$solved</td>";
-		echo "<td>$last_updated</td>";
-		echo "</tr>\n";
-	}
-}
-?>
-</table>
 </body>
 </html>

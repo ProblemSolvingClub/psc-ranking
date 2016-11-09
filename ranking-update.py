@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-import collections, functools, json, logging, lxml.html, os, sqlite3, traceback, urllib.error, urllib.request
+import collections, functools, json, logging, lxml.html, os, re, sqlite3, traceback, urllib.error, urllib.request
 
 # This assumes that ranking.sqlite3 is in the same folder as this script.
 dir_path = os.path.dirname(os.path.realpath(__file__))
 db_path = os.path.join(dir_path + '/ranking.sqlite3')
+
+# Kattis seems to block urllib user agent
+kattis_user_agent = 'Mozilla/5.0 (X11; CrOS x86_64 8350.68.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36'
 
 # Connect to database.
 db = sqlite3.connect(db_path)
@@ -42,13 +45,11 @@ def scrape_coj(site_id, username_userid):
         update_solved(site_id, username, solved)
 
 def scrape_kattis(site_id, username_userid):
-    # Kattis seems to block urllib user agent
-    user_agent = 'Mozilla/5.0 (X11; CrOS x86_64 8350.68.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36'
 
     # First, get users who are listed as University of Calgary
     # This reduces the number of requests needed
     req = urllib.request.Request('https://open.kattis.com/universities/ucalgary.ca')
-    req.add_header('User-Agent', user_agent)
+    req.add_header('User-Agent', kattis_user_agent)
     tree = lxml.html.fromstring(get_http(req))
     solved = tree.cssselect('.table-kattis tbody tr')
     for tr in solved:
@@ -61,7 +62,7 @@ def scrape_kattis(site_id, username_userid):
     # Then get other users
     for username in username_userid.keys():
         req = urllib.request.Request('https://open.kattis.com/users/%s' % username)
-        req.add_header('User-Agent', user_agent)
+        req.add_header('User-Agent', kattis_user_agent)
         try:
             tree = lxml.html.fromstring(get_http(req))
             score = float(tree.cssselect('.rank tr:nth-child(2) td:nth-child(2)')[0].text)
@@ -105,6 +106,7 @@ supported_sites = [
     SupportedSite(id=8, name='UVa Online Judge', scrape_func=functools.partial(scrape_uva, 'http://uhunt.felix-halim.net')),
 ]
 
+# Scrape users on sites
 for site in supported_sites:
     print('Processing %s' % site.name)
     username_userid = {}
@@ -114,5 +116,29 @@ for site in supported_sites:
         site.scrape_func(site.id, username_userid)
     except:
         logging.exception('Fatal error occured while scraping %s', site.name)
+
+# Scrape Kattis contests
+for row in db.execute('SELECT kattis_contest_id AS k FROM meeting WHERE NOT EXISTS (SELECT 1 FROM kattis_contest WHERE kattis_contest_id=k)'):
+    req = urllib.request.Request('https://open.kattis.com/contests/%s' % row['k'])
+    req.add_header('User-Agent', kattis_user_agent)
+    html = get_http(req)
+    tree = lxml.html.fromstring(html)
+    contest_name = tree.cssselect('h2.title')[0].text
+    problem_ids = [a.get('href').split('/')[-1] for a in tree.cssselect('tr:first-child th.problemcolheader-standings a')]
+
+    # Insert HTML to database so we have it
+    db.execute('INSERT INTO kattis_contest (kattis_contest_id, kattis_contest_name, html) VALUES (?, ?, ?)', (row['k'], contest_name, html))
+
+    for tr in tree.cssselect('#standings tr'):
+        user_a = tr.cssselect('a')
+        if not user_a: continue # not a user row
+        user_href = user_a[0].get('href')
+        user_match = re.match(r'^/users/(.+)$', user_href)
+        if not user_match: continue # not a user row
+        kattis_user = user_href.split('/')[-1]
+        for i, td in enumerate(tr.cssselect('td')[4:]):
+            class_attr = td.get('class')
+            if class_attr and 'solved' in class_attr: # NOTE: This does not do a proper class check
+                db.execute('INSERT INTO kattis_contest_solved (kattis_contest_id, kattis_username, kattis_problem_id) VALUES (?,?,?)', (row['k'], kattis_user, problem_ids[i]))
 
 db.commit()
