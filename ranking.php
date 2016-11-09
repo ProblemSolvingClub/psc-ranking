@@ -33,7 +33,7 @@ foreach ($db->query($tiers_sql) as $row) {
 // Users with scores.
 // [ { id, firstName, lastName, totalSolved, siteSolved: [{siteId: solved}] } ]
 $users = array();
-$users_sql = 'SELECT id, first_name, last_name FROM user WHERE NOT unofficial';
+$users_sql = 'SELECT id, first_name, last_name, (SELECT COUNT(*) FROM meeting_attended WHERE user_id=id) AS meeting_count, (SELECT COUNT(*) FROM kattis_contest_solved WHERE kattis_username IN (SELECT username FROM site_account WHERE site_id=5 AND user_id=id)) AS bonus_count FROM user WHERE NOT unofficial';
 $site_solved_all_sth = $db->prepare("SELECT solved FROM site_score WHERE site_id=? AND username=? AND created_date > '{$semesterStartDate}' ORDER BY created_date ASC");
 $site_solved_before_sth = $db->prepare("SELECT solved FROM site_score WHERE site_id=? AND username=? AND created_date < '{$semesterStartDate}' ORDER BY created_date DESC LIMIT 1");
 $site_solved_oldest_sth = $db->prepare("SELECT solved FROM site_score WHERE site_id=? AND username=? ORDER BY created_date ASC LIMIT 1");
@@ -41,7 +41,9 @@ $site_solved_oldest_sth = $db->prepare("SELECT solved FROM site_score WHERE site
 // Get all user IDs.
 foreach ($db->query($users_sql) as $row) {
     $user_id = $row['id'];
-    $total_solved = 0;
+
+	// 3 problems for attendance and 2 extra points for bonus problem
+    $total_solved = $row['meeting_count']*3 + $row['bonus_count']*2;
     $site_solved = array(); // { site_id: num_solved_this_semester }
 
     foreach($sites as $site) {
@@ -89,7 +91,9 @@ foreach ($db->query($users_sql) as $row) {
         'firstName' => $row['first_name'],
         'lastName' => $row['last_name'],
         'totalSolved' => $total_solved,
-        'siteSolved' => $site_solved
+        'siteSolved' => $site_solved,
+        'attendedMeetings' => $row['meeting_count'],
+        'bonusProblems' => $row['bonus_count'],
     );
 }
 
