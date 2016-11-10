@@ -54,10 +54,10 @@ def seed_tier():
     Tier = collections.namedtuple('Tier', 'id name minimum_score')
     tiers = [
                 Tier(id=1, name='Bits', minimum_score=0),
-                Tier(id=2, name='Bytes', minimum_score=5),
-                Tier(id=3, name='Floats', minimum_score=15),
-                Tier(id=4, name='Ints', minimum_score=30),
-                Tier(id=5, name='Doubles', minimum_score=40)
+                Tier(id=2, name='Bytes', minimum_score=25),
+                Tier(id=3, name='Integers', minimum_score=50),
+                Tier(id=4, name='Floats', minimum_score=100),
+                Tier(id=5, name='Doubles', minimum_score=125)
             ]
 
     for tier in tiers:
