@@ -1,7 +1,7 @@
 <?php
 if (!defined('IN_PSC_RANKING_ADMIN')) die;
 ?>
-<table border=1>
+<table border=1 class="form_panel">
 <tr>
 <td valign=top>
 <h2>Add Meeting</h2>
@@ -44,17 +44,33 @@ foreach ($sites as $site_id => $site) {
 </form>
 </td>
 <td valign=top>
-<h2>Toggle Unofficial</h2>
+<h2>Toggle User Flags</h2>
 <form method="post">
-<input type="hidden" name="action" value="toggle_unofficial">
+<input type="hidden" name="action" value="toggle_unofficial_admin">
 <label>User: <select name="user_id">
 <?php
 foreach ($users as $user) {
 	echo "<option value=\"{$user['id']}\">{$user['first_name']} {$user['last_name']}</option>\n";
 }
 ?>
-</select></label>
-<input type="submit" value="Toggle Unofficial">
+</select></label><br>
+<input type="submit" name="submit" value="Toggle Unofficial"><br>
+<input type="submit" name="submit" value="Toggle Admin">
+</form>
+</td>
+<td valign=top>
+<h2>Change UCID</h2>
+<form method="post">
+<input type="hidden" name="action" value="change_ucid">
+<label>User: <select name="user_id">
+<?php
+foreach ($users as $user) {
+	echo "<option value=\"{$user['id']}\">{$user['first_name']} {$user['last_name']}</option>\n";
+}
+?>
+</select></label><br>
+<label>UCID: <input type="text" name="ucid"></label><br>
+<input type="submit" value="Change UCID">
 </form>
 </td>
 </tr>
@@ -80,7 +96,7 @@ foreach ($meetings as $meeting) {
 </table>
 <h2>User List</h2>
 <table border="1">
-<tr><th>Name</th><th>Attended<br>Meetings</th><th>Bonus<br>Problems</th><th>Website</th><th>Username</th><th>Solved</th><th>Last Updated (UTC)</th></tr>
+<tr><th>Name</th><th>UCID</th><th>Attended<br>Meetings</th><th>Bonus<br>Problems</th><th>Website</th><th>Username</th><th>Solved</th><th>Last Updated (UTC)</th></tr>
 <?php
 $sites_sth = $db->prepare('SELECT site_id, username FROM site_account WHERE user_id=?');
 $score_sth = $db->prepare('SELECT solved, created_date FROM site_score WHERE site_id=? AND username=? ORDER BY created_date DESC LIMIT 1');
@@ -95,9 +111,16 @@ foreach ($users as $user) {
 		else return 1;
 	});
 	$rowspan = max(1,count($accounts));
-	echo "<tr><td rowspan=$rowspan>{$user['first_name']} {$user['last_name']}";
-	if ($user['unofficial']) echo '<br>(Unofficial)</br>';
+	echo "<tr><td rowspan=$rowspan>";
+	echo "<a href='ranking-admin.php?user_id={$user['id']}'>";
+	echo "{$user['first_name']} {$user['last_name']}";
+	echo "</a>";
+	$flags = array();
+	if ($user['admin']) $flags[] = 'Admin';
+	if ($user['unofficial']) $flags[] = 'Unofficial';
+	if (count($flags) > 0) echo '<br>(' . implode(', ', $flags) . ')';
 	echo "</td>\n";
+	echo "<td rowspan=$rowspan>{$user['ucid']}</td>";
 	echo "<td rowspan=$rowspan>{$user['meeting_count']}</td>";
 	echo "<td rowspan=$rowspan>{$user['bonus_count']}</td>";
 	$first = true;
