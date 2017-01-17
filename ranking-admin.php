@@ -59,7 +59,7 @@ function action_add_meeting() {
 }
 
 function action_add_user() {
-	global $db, $status_message;
+	global $db, $logged_in_user, $status_message;
 	if (!(isset($_POST['first_name']) && isset($_POST['last_name']))) {
 		$status_message = 'Insufficent parameters';
 		return;
@@ -69,8 +69,8 @@ function action_add_user() {
 	if (empty($first_name) || empty($last_name)) die('Must provide first and last name');
 
 	// Insert data
-	$sth = $db->prepare('INSERT INTO user (first_name, last_name) VALUES (?, ?)');
-	if ($sth->execute(array($first_name, $last_name))) {
+	$sth = $db->prepare('INSERT INTO user (first_name, last_name, created_user_id) VALUES (?, ?, ?)');
+	if ($sth->execute(array($first_name, $last_name, $logged_in_user['id']))) {
 		$status_message = 'User added successfully.';
 	} else {
 		$status_message = 'Unable to add user.';
@@ -113,26 +113,42 @@ function action_toggle_unofficial_admin() {
 	}
 }
 
+function get_meeting_attendance($meeting_id) {
+	global $db;
+	$attendance_sth = $db->prepare('SELECT user_id, attended FROM meeting_attended WHERE meeting_id=? ORDER BY created_date DESC');
+	$attendance_sth->execute(array($meeting_id));
+	$attended_user_ids = array();
+	while ($row = $attendance_sth->fetch()) {
+		if (!array_key_exists($row['user_id'], $attended_user_ids)) {
+			$attended_user_ids[$row['user_id']] = $row['attended'];
+		}
+	}
+	return $attended_user_ids;
+}
+
 function action_update_meeting_attendance() {
-	global $db, $status_message;
+	global $db, $logged_in_user, $status_message;
 	if (!isset($_POST['meeting_id'])) {
 		$status_message = 'Insufficent parameters';
 		return;
 	}
 	$meeting_id = $_POST['meeting_id'];
 
-	// First, delete all existing attendance
-	$sth = $db->prepare('DELETE FROM meeting_attended WHERE meeting_id=?');
-	if (!$sth->execute(array($meeting_id))) {
-		$status_message = 'Unable to delete all existing attendance.';
-		return;
-	}
+	// First, get existing attendance
+	$attended_user_ids = get_meeting_attendance($meeting_id);
 
-	// Next, insert al new attendance
-	$sth = $db->prepare('INSERT INTO meeting_attended (meeting_id, user_id) VALUES (?,?)');
-	foreach ($_POST as $user_id => $val) {
-		if (preg_match('/^[0-9]+$/', $user_id) && !empty($val)) {
-			if (!$sth->execute(array($meeting_id, $user_id))) {
+	// Get all user IDs
+	$users = $db->query('SELECT id FROM user')->fetchAll();
+
+	// Next, insert new attendance if different
+	$sth = $db->prepare('INSERT INTO meeting_attended (meeting_id, user_id, attended, created_user_id) VALUES (?,?,?,?)');
+	foreach ($users as $user) {
+		$attended = array_key_exists($user['id'], $_POST) && !empty($_POST[$user['id']]);
+		$attended_prev_value = array_key_exists($user['id'], $attended_user_ids) && $attended_user_ids[$user['id']];
+		if ($attended != $attended_prev_value) {
+			// Insert new attendance value
+			$attended_value = $attended ? 1 : 0;
+			if (!$sth->execute(array($meeting_id, $user['id'], $attended_value, $logged_in_user['id']))) {
 				$status_message = 'Unexpected error updating attendance.';
 				return;
 			}
@@ -177,7 +193,7 @@ function require_login() {
 		die;
 	}
 	if (isset($_SESSION['psc-ranking-user-id'])) {
-		$sth = $db->prepare('SELECT first_name, last_name FROM user WHERE id=? AND admin=1');
+		$sth = $db->prepare('SELECT id, first_name, last_name FROM user WHERE id=? AND admin=1');
 		$sth->execute(array($_SESSION['psc-ranking-user-id']));
 		$sth_row = $sth->fetch();
 		if ($sth_row === false) {
@@ -217,6 +233,8 @@ uasort($users, function($a, $b) {
 	elseif ($av == $bv) return 0;
 	else return 1;
 });
+$user_ids_to_index = array();
+foreach ($users as $index => $user) $user_ids_to_index[$user['id']] = $index;
 
 // Get all user IDs.
 ?>

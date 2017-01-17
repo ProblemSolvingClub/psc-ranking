@@ -33,7 +33,7 @@ foreach ($db->query($tiers_sql) as $row) {
 // Users with scores.
 // [ { id, firstName, lastName, totalSolved, siteSolved: [{siteId: solved}] } ]
 $users = array();
-$users_sql = "SELECT id, first_name, last_name, (SELECT COUNT(*) FROM meeting m, meeting_attended a WHERE m.id=a.meeting_id AND a.user_id=user.id AND m.date>='{$semesterStartDate}') AS meeting_count, (SELECT COUNT(*) FROM site_account sa, kattis_contest_solved kcs, meeting m WHERE sa.user_id=user.id AND sa.site_id=5 AND sa.username=kcs.kattis_username AND kcs.kattis_contest_id=m.kattis_contest_id AND m.date>='{$semesterStartDate}') AS bonus_count FROM user WHERE NOT unofficial";
+$users_sql = "SELECT id, first_name, last_name, (SELECT COUNT(*) FROM meeting m WHERE (SELECT attended FROM meeting_attended ma WHERE m.id=ma.meeting_id AND ma.user_id=user.id ORDER BY created_date DESC LIMIT 1)=1 AND m.date>='{$semesterStartDate}') AS meeting_count, (SELECT COUNT(*) FROM site_account sa, kattis_contest_solved kcs, meeting m WHERE sa.user_id=user.id AND sa.site_id=5 AND sa.username=kcs.kattis_username AND kcs.kattis_contest_id=m.kattis_contest_id AND m.date>='{$semesterStartDate}') AS bonus_count FROM user WHERE NOT unofficial";
 $site_solved_all_sth = $db->prepare("SELECT solved FROM site_score WHERE site_id=? AND username=? AND created_date > '{$semesterStartDate}' ORDER BY created_date ASC");
 $site_solved_before_sth = $db->prepare("SELECT solved FROM site_score WHERE site_id=? AND username=? AND created_date < '{$semesterStartDate}' ORDER BY created_date DESC LIMIT 1");
 $site_solved_oldest_sth = $db->prepare("SELECT solved FROM site_score WHERE site_id=? AND username=? ORDER BY created_date ASC LIMIT 1");
