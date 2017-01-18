@@ -142,9 +142,26 @@ foreach ($users as $user) {
 		echo "<td><a target=\"_blank\" href=\"$url\">{$account['username']}</a></td>";
 		echo "<td>$solved</td>";
 		echo "<td>$last_updated</td>";
+		echo "<td><a href='javascript:;' onclick=\"deleteAcct({$user['id']}, {$site['id']}, '" . addslashes($account['username']) . "');\">Delete</a></td>";
 		echo "</tr>\n";
 	}
 	if (empty($accounts)) echo "</tr>\n";
 }
 ?>
 </table>
+<form method="post" id="delete_account_form">
+<input type="hidden" name="action" value="delete_account">
+<input type="hidden" name="user_id">
+<input type="hidden" name="site_id">
+<input type="hidden" name="username">
+</form>
+<script>
+function deleteAcct(user_id, site_id, username) {
+	if (!confirm("Are you sure? Delete account "+site_id+":"+username+" for user "+user_id)) return;
+	var form = document.getElementById('delete_account_form');
+	form.user_id.value = user_id;
+	form.site_id.value = site_id;
+	form.username.value = username;
+	form.submit();
+}
+</script>

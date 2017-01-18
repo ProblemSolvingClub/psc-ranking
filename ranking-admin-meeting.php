@@ -53,19 +53,3 @@ foreach ($users as $user) {
 </table>
 <input type=submit value="Save attendance">
 </form>
-<h3>Log</h3>
-<ol>
-<?php
-$attendance_sth = $db->prepare('SELECT user_id, attended, created_date, created_user_id FROM meeting_attended WHERE meeting_id=? ORDER BY created_date');
-$attendance_sth->execute(array($meeting_id));
-$attended_user_ids = array();
-while ($row = $attendance_sth->fetch()) {
-	$created_user = ($row['created_user_id'] !== null) ? $users[$user_ids_to_index[$row['created_user_id']]] : null;
-	$created_user_name = ($created_user !== null) ? "{$created_user['first_name']} {$created_user['last_name']}" : "(unknown user)";
-	$target_user = $users[$user_ids_to_index[$row['user_id']]];
-	$target_user_name = "{$target_user['first_name']} {$target_user['last_name']}";
-	echo "<li>{$row['created_date']} $created_user_name set attendance for $target_user_name to {$row['attended']}";
-	echo "</li>";
-}
-?>
-</ol>
