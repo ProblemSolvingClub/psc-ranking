@@ -12,7 +12,7 @@ echo "<h2>User: {$user_row['first_name']} {$user_row['last_name']}</h2>\n";
 <ol>
 <?php
 
-$attended_meetings_sth = $db->prepare('SELECT id, date FROM meeting m WHERE (SELECT attended FROM meeting_attended ma WHERE m.id=ma.meeting_id AND ma.user_id=? ORDER BY created_date DESC LIMIT 1)=1 ORDER BY date DESC');
+$attended_meetings_sth = $db->prepare('SELECT id, date FROM meeting m, meeting_attended ma WHERE m.id=ma.meeting_id AND ma.user_id=? ORDER BY date DESC');
 $attended_meetings_sth->execute(array($user_id));
 while ($row = $attended_meetings_sth->fetch()) {
 	echo "<li><a href='ranking-admin.php?meeting_id={$row['id']}'>{$row['date']}</a></li>\n";
