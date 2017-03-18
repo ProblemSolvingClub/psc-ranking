@@ -118,7 +118,7 @@ for site in supported_sites:
         logging.exception('Fatal error occured while scraping %s', site.name)
 
 # Scrape Kattis contests
-for row in db.execute('SELECT kattis_contest_id AS k FROM meeting WHERE NOT EXISTS (SELECT 1 FROM kattis_contest WHERE kattis_contest_id=k)'):
+for row in db.execute('SELECT kattis_contest_id AS k FROM meeting WHERE kattis_contest_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM kattis_contest WHERE kattis_contest_id=k)'):
     req = urllib.request.Request('https://open.kattis.com/contests/%s' % row['k'])
     req.add_header('User-Agent', kattis_user_agent)
     html = get_http(req)
