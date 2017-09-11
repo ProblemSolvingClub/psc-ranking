@@ -75,6 +75,16 @@ foreach ($users as $user) {
 </td>
 </tr>
 </table>
+<h2>Semester Start Date</h2>
+<?php
+$semesterStartDate = $db->query('SELECT value FROM setting WHERE name=\'semester_start_date\'')->fetch()[0];
+echo 'The semester start date is <b>' . htmlspecialchars($semesterStartDate) . '</b>.';
+?>
+<form method="post">
+<input type="hidden" name="action" value="change_semester_start_date">
+<label>New date (yyyy-mm-dd): <input type="text" name="date" value="<?php echo strftime('%Y-%m-%d'); ?>" size="10"></label>
+<input type="submit" value="Submit">
+</form>
 <h2>Meeting List</h2>
 <table border="1">
 <tr><th>Date</th><th>Kattis Contest ID</th></tr>

@@ -12,6 +12,7 @@ define('LOG_ACTION_ADD_MEETING', 6);
 define('LOG_ACTION_CHANGE_MEETING_ATTENDANCE', 7);
 define('LOG_ACTION_ADD_ACCOUNT', 8);
 define('LOG_ACTION_DELETE_ACCOUNT', 9);
+define('LOG_ACTION_CHANGE_SEMESTER_START_DATE', 10);
 
 date_default_timezone_set('America/Edmonton');
 
@@ -200,6 +201,21 @@ function action_update_meeting_attendance() {
 	$status_message = 'Attendance updated successfully.';
 }
 
+function action_change_semester_start_date() {
+	global $db, $logged_in_user, $status_message;
+	if (!(isset($_POST['date'])) || !preg_match('/^[0-9]{4}\-[0-9]{2}\-[0-9]{2}$/', $_POST['date'])) {
+		$status_message = 'Invalid date.';
+		return;
+	}
+	$sth = $db->prepare('INSERT OR REPLACE INTO setting (name, value) VALUES (\'semester_start_date\', ?)');
+	if ($sth->execute(array($_POST['date']))) {
+		insert_log($logged_in_user['id'], LOG_ACTION_CHANGE_SEMESTER_START_DATE, null, null, $_POST['date']);
+		$status_message = 'Semester start date changed successfully.';
+	} else {
+		$status_message = 'Unable to add change semester start date.';
+	}
+}
+
 function insert_log($user_id, $action, $target_user_id=null, $target_meeting_id=null, $value=null) {
 	global $db;
 	$sth = $db->prepare("INSERT INTO log (user_id, action, target_user_id, target_meeting_id, value) VALUES (?, ?, ?, ?, ?)");
@@ -296,6 +312,7 @@ if (isset($_POST['action'])) {
 	elseif ($_POST['action'] == 'delete_account') action_delete_account();
 	elseif ($_POST['action'] == 'toggle_unofficial_admin') action_toggle_unofficial_admin();
 	elseif ($_POST['action'] == 'update_meeting_attendance') action_update_meeting_attendance();
+	elseif ($_POST['action'] == 'change_semester_start_date') action_change_semester_start_date();
 	else $status_message = 'Invalid action.';
 }
 

@@ -25,6 +25,9 @@ foreach ($db->query($log_sql) as $log_row) {
 		case LOG_ACTION_CHANGE_MEETING_ATTENDANCE:
 			$text = "set attendance={$log_row['value']} for user {$log_row['target_user_id']} in meeting {$log_row['target_meeting_id']}";
 			break;
+		case LOG_ACTION_CHANGE_SEMESTER_START_DATE:
+			$text = "changed semester start date to {$log_row['value']}";
+			break;
 		case LOG_ACTION_CHANGE_UCID:
 			$text = "set ucid={$log_row['value']} for user {$log_row['target_user_id']}";
 			break;
