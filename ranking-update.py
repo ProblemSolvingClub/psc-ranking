@@ -119,15 +119,27 @@ for site in supported_sites:
 
 # Scrape Kattis contests
 for row in db.execute('SELECT kattis_contest_id AS k FROM meeting WHERE kattis_contest_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM kattis_contest WHERE kattis_contest_id=k)'):
+    print('Scraping Kattis content %s' % row['k'])
     req = urllib.request.Request('https://open.kattis.com/contests/%s' % row['k'])
     req.add_header('User-Agent', kattis_user_agent)
     html = get_http(req)
     tree = lxml.html.fromstring(html)
     contest_name = tree.cssselect('h2.title')[0].text
-    problem_ids = [a.get('href').split('/')[-1] for a in tree.cssselect('tr:first-child th.problemcolheader-standings a')]
 
     # Insert HTML to database so we have it
     db.execute('INSERT INTO kattis_contest (kattis_contest_id, kattis_contest_name, html) VALUES (?, ?, ?)', (row['k'], contest_name, html))
+
+    # Determine columns that represent problems
+    cell_to_problem_id = {}
+    col = 0
+    for th in tree.cssselect('#standings thead tr th'):
+        class_attr = th.get('class')
+        if class_attr and 'problemcolheader-standings' in class_attr: # NOTE: This does not do a proper class check
+            problem_id = th.cssselect('a')[0].get('href').split('/')[-1]
+            cell_to_problem_id[col] = problem_id
+        colspan = th.get('colspan')
+        if not colspan: colspan = '1'
+        col += int(colspan)
 
     for tr in tree.cssselect('#standings tr'):
         user_a = tr.cssselect('a')
@@ -136,9 +148,15 @@ for row in db.execute('SELECT kattis_contest_id AS k FROM meeting WHERE kattis_c
         user_match = re.match(r'^/users/(.+)$', user_href)
         if not user_match: continue # not a user row
         kattis_user = user_href.split('/')[-1]
-        for i, td in enumerate(tr.cssselect('td')[4:]):
-            class_attr = td.get('class')
-            if class_attr and 'solved' in class_attr: # NOTE: This does not do a proper class check
-                db.execute('INSERT INTO kattis_contest_solved (kattis_contest_id, kattis_username, kattis_problem_id) VALUES (?,?,?)', (row['k'], kattis_user, problem_ids[i]))
+        col = 0
+        for td in tr.cssselect('td'):
+            if col in cell_to_problem_id:
+                problem_id = cell_to_problem_id[col]
+                class_attr = td.get('class')
+                if class_attr and 'solved' in class_attr: # NOTE: This does not do a proper class check
+                    db.execute('INSERT INTO kattis_contest_solved (kattis_contest_id, kattis_username, kattis_problem_id) VALUES (?,?,?)', (row['k'], kattis_user, problem_id))
+            colspan = td.get('colspan')
+            if not colspan: colspan = '1'
+            col += int(colspan)
 
 db.commit()
