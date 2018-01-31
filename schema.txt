@@ -1,0 +1,16 @@
+CREATE TABLE tier(id INTEGER PRIMARY KEY, name TEXT NOT NULL, minimum_score INTEGER NOT NULL, created_date DATETIME DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE site(id INTEGER PRIMARY KEY, name TEXT NOT NULL, profile_url TEXT NOT NULL, created_date DATETIME DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE "site_score"(id INTEGER PRIMARY KEY, site_id INTEGER NOT NULL, username TEXT NOT NULL, solved INTEGER NOT NULL, created_date DATETIME DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE "site_account"(user_id INTEGER NOT NULL, site_id INTEGER NOT NULL, username TEXT NOT NULL, created_date DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(site_id, username));
+CREATE TABLE meeting(id INTEGER PRIMARY KEY, date DATE NOT NULL, kattis_contest_id TEXT, created_date DATETIME DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE kattis_contest_solved(kattis_contest_id TEXT NOT NULL, kattis_username TEXT NOT NULL, kattis_problem_id TEXT NOT NULL, PRIMARY KEY(kattis_contest_id, kattis_username, kattis_problem_id));
+CREATE UNIQUE INDEX meeting_date on meeting(date);
+CREATE TABLE log(id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, action INTEGER NOT NULL, target_user_id INTEGER NULL, target_meeting_id INTEGER NULL, value INTEGER NULL, created_date DATETIME DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE "user" (id INTEGER PRIMARY KEY, first_name TEXT NOT NULL, last_name TEXT NOT NULL, unofficial INTEGER NOT NULL DEFAULT 0, ucid INTEGER NULL, admin INTEGER NOT NULL DEFAULT 0, created_date DATETIME DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE setting(name TEXT PRIMARY KEY, value TEXT);
+CREATE INDEX site_score_idx on site_score (site_id, username, created_date);
+CREATE INDEX site_account_idx on site_account (user_id, site_id);
+CREATE TABLE "kattis_contest"(kattis_contest_id TEXT PRIMARY KEY, kattis_contest_name TEXT NOT NULL, html TEXT NOT NULL, is_over INTEGER, created_date DATETIME DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX kattis_contest_solved_kattis_username on kattis_contest_solved (kattis_username);
+CREATE TABLE "meeting_attended" (meeting_id INTEGER NOT NULL, user_id INTEGER NOT NULL, PRIMARY KEY(meeting_id, user_id));
+CREATE INDEX meeting_attended_user_id on meeting_attended(user_id);

@@ -41,7 +41,7 @@ $site_solved_oldest_sth = $db->prepare("SELECT solved FROM site_score WHERE site
 foreach ($db->query($users_sql) as $row) {
     $user_id = $row['id'];
 
-	// 3 problems for attendance and 2 extra points for bonus problem
+	// 3 points for attendance and 2 extra points for bonus problem
     $total_solved = $row['meeting_count']*3 + $row['bonus_count']*2;
     $site_solved = array(); // { site_id: num_solved_this_semester }
 

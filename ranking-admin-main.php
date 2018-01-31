@@ -87,19 +87,20 @@ echo 'The semester start date is <b>' . htmlspecialchars($semesterStartDate) . '
 </form>
 <h2>Meeting List</h2>
 <table border="1">
-<tr><th>Date</th><th>Kattis Contest ID</th></tr>
+<tr><th>Date</th><th>Kattis Contest ID</th><th>Last Scraped</th></tr>
 <?php
-$meetings = $db->query('SELECT id, date, kattis_contest_id FROM meeting ORDER BY date DESC')->fetchAll();
-$kattis_contest_name_sth = $db->prepare('SELECT kattis_contest_name FROM kattis_contest WHERE kattis_contest_id=?');
+$meetings = $db->query('SELECT id, date, meeting.kattis_contest_id, kattis_contest_name, kattis_contest.created_date FROM meeting LEFT JOIN kattis_contest ON meeting.kattis_contest_id=kattis_contest.kattis_contest_id ORDER BY date DESC')->fetchAll();
 foreach ($meetings as $meeting) {
-	$kattis_contest_name_sth->execute(array($meeting['kattis_contest_id']));
 	$contest_desc = $meeting['kattis_contest_id'];
-	if ($row = $kattis_contest_name_sth->fetch()) {
-		$contest_desc = "<a href=\"https://open.kattis.com/contests/{$meeting['kattis_contest_id']}\">{$row['kattis_contest_name']} ({$meeting['kattis_contest_id']})</a>";
+	$last_scraped = 'Never';
+	if ($meeting['kattis_contest_id'] !== null) {
+		$contest_desc = "<a href=\"https://open.kattis.com/contests/{$meeting['kattis_contest_id']}\">{$meeting['kattis_contest_name']} ({$meeting['kattis_contest_id']})</a>";
+		$last_scraped = $meeting['created_date'];
 	}
 	echo "<tr>";
 	echo "<td><a href='ranking-admin.php?meeting_id={$meeting['id']}'>{$meeting['date']}</a></td>";
 	echo "<td>$contest_desc</td>";
+	echo "<td>$last_scraped</td>";
 	echo "</tr>\n";
 }
 ?>
@@ -121,10 +122,9 @@ foreach ($users as $user) {
 		else return 1;
 	});
 	$rowspan = max(1,count($accounts));
+	$full_name = "{$user['first_name']} {$user['last_name']}";
 	echo "<tr><td rowspan=$rowspan>";
-	echo "<a href='ranking-admin.php?user_id={$user['id']}'>";
-	echo "{$user['first_name']} {$user['last_name']}";
-	echo "</a>";
+	echo "<a href='ranking-admin.php?user_id={$user['id']}'>$full_name</a>";
 	$flags = array();
 	if ($user['admin']) $flags[] = 'Admin';
 	if ($user['unofficial']) $flags[] = 'Unofficial';
@@ -152,7 +152,7 @@ foreach ($users as $user) {
 		echo "<td><a target=\"_blank\" href=\"$url\">{$account['username']}</a></td>";
 		echo "<td>$solved</td>";
 		echo "<td>$last_updated</td>";
-		echo "<td><a href='javascript:;' onclick=\"deleteAcct({$user['id']}, {$site['id']}, '" . addslashes($account['username']) . "');\">Delete</a></td>";
+		echo "<td><a href='javascript:;' onclick=\"deleteAcct({$user['id']}, '" . addslashes($full_name) . "', {$site['id']}, '" . addslashes($site['name']) . "', '" . addslashes($account['username']) . "');\">Delete</a></td>";
 		echo "</tr>\n";
 	}
 	if (empty($accounts)) echo "</tr>\n";
@@ -166,8 +166,10 @@ foreach ($users as $user) {
 <input type="hidden" name="username">
 </form>
 <script>
-function deleteAcct(user_id, site_id, username) {
-	if (!confirm("Are you sure? Delete account "+site_id+":"+username+" for user "+user_id)) return;
+function deleteAcct(user_id, full_name, site_id, site_name, username) {
+	if (!confirm("Are you sure? Delete " + site_name + 
+		" account "+username+
+		" for user "+full_name+" ("+user_id+")")) return;
 	var form = document.getElementById('delete_account_form');
 	form.user_id.value = user_id;
 	form.site_id.value = site_id;
