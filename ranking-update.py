@@ -145,7 +145,7 @@ supported_sites = [
     SupportedSite(id=8, name='UVa Online Judge', scrape_func=functools.partial(scrape_uva, 'http://uhunt.felix-halim.net')),
 ]
 
- Scrape users on sites
+# Scrape users on sites
 for site in supported_sites:
     print('Processing %s' % site.name)
     username_userid = {}

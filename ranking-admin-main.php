@@ -93,7 +93,7 @@ $meetings = $db->query('SELECT id, date, meeting.kattis_contest_id, kattis_conte
 foreach ($meetings as $meeting) {
 	$contest_desc = $meeting['kattis_contest_id'];
 	$last_scraped = 'Never';
-	if ($meeting['kattis_contest_id'] !== null) {
+	if ($meeting['kattis_contest_name'] !== null) {
 		$contest_desc = "<a href=\"https://open.kattis.com/contests/{$meeting['kattis_contest_id']}\">{$meeting['kattis_contest_name']} ({$meeting['kattis_contest_id']})</a>";
 		$last_scraped = $meeting['created_date'];
 	}
