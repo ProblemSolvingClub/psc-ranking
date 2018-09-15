@@ -56,27 +56,9 @@ echo 'The semester start date is <b>' . htmlspecialchars($semesterStartDate) . '
 <label>New date (yyyy-mm-dd): <input type="text" name="date" value="<?php echo strftime('%Y-%m-%d'); ?>" size="10"></label>
 <input type="submit" value="Submit">
 </form>
-<h2>Meeting List</h2>
-<table border="1">
-<tr><th>Date</th><th>Kattis Contest ID</th><th>Last Scraped</th></tr>
-<?php
-$meetings = $db->query('SELECT id, date, meeting.kattis_contest_id, kattis_contest_name, kattis_contest.created_date FROM meeting LEFT JOIN kattis_contest ON meeting.kattis_contest_id=kattis_contest.kattis_contest_id WHERE NOT meeting.deleted ORDER BY date DESC')->fetchAll();
-foreach ($meetings as $meeting) {
-	$contest_desc = $meeting['kattis_contest_id'];
-	$last_scraped = 'Never';
-	if ($meeting['kattis_contest_name'] !== null) {
-		$contest_desc = "<a href=\"https://open.kattis.com/contests/{$meeting['kattis_contest_id']}\">{$meeting['kattis_contest_name']} ({$meeting['kattis_contest_id']})</a>";
-		$last_scraped = $meeting['created_date'];
-	}
-	$date_str = date_with_dow($meeting['date']);
-	echo "<tr>";
-	echo "<td><a href='ranking-admin.php?meeting_id={$meeting['id']}'>$date_str</a></td>";
-	echo "<td>$contest_desc</td>";
-	echo "<td>$last_scraped</td>";
-	echo "</tr>\n";
-}
-?>
-</table>
+<h2>Meetings This Semester</h2>
+<p><a href="ranking-admin.php?all_meeting_list">View all meetings</a></p>
+<?php require('ranking-admin-meeting-list.php'); ?>
 <h2>User List</h2>
 <p><a href="ranking-admin.php?deleted_user_list">View deleted users</a></p>
 <?php require('ranking-admin-user-list.php'); ?>

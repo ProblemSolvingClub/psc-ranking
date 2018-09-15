@@ -580,7 +580,6 @@ if (isset($status_message)) {
 <h1><a href="ranking-admin.php">PSC Ranking Admin</a></h1>
 <p>
 Welcome <?php echo "{$logged_in_user['first_name']} {$logged_in_user['last_name']}"; ?>!
-<a href="ranking-admin.php?deleted_user_list">View deleted users</a>
 <a href="ranking-admin.php?log">View log</a>
 <a href="ranking-admin.php?logout">Log out</a>
 </p>
@@ -595,6 +594,10 @@ if (isset($_GET['meeting_id'])) {
 	define('USER_LIST_DELETED', true);
 	echo '<h2>Deleted Users</h2>';
 	require('ranking-admin-user-list.php');
+} else if (isset($_GET['all_meeting_list'])) {
+	define('ALL_MEETING_LIST', true);
+	echo '<h2>All Meetings</h2>';
+	require('ranking-admin-meeting-list.php');
 } else {
 	require('ranking-admin-main.php');
 }
