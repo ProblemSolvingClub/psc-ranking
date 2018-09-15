@@ -1,13 +1,27 @@
 <?php
 if (!defined('IN_PSC_RANKING_ADMIN')) die;
 $user_id = $_GET['user_id'];
-$user_sth = $db->prepare('SELECT id, first_name, last_name, ucid, unofficial, admin FROM user WHERE id=?');
+$user_sth = $db->prepare('SELECT id, first_name, last_name, ucid, unofficial, admin, deleted FROM user WHERE id=?');
 $user_sth->execute(array($user_id));
 $user_row = $user_sth->fetch();
 if ($user_row === false) die('Invalid user ID');
 
-echo "<h2>User: {$user_row['first_name']} {$user_row['last_name']}</h2>\n";
+$full_name = "{$user_row['first_name']} {$user_row['last_name']}";
+$deleted = $user_row['deleted'] ? ' <font color=red>(Deleted)</font>' : '';
+echo "<h2>User: " . htmlspecialchars($full_name) . "$deleted</h2>\n";
+
+if (!$user_row['deleted']) {
 ?>
+<h3>Alter User</h3>
+<form method="post">
+<input type="hidden" name="action" value="change_user_properties">
+<input type="hidden" name="user_id" value="<?php echo $user_id; ?>">
+<label>First name: <input type="text" name="first_name" value="<?php echo htmlspecialchars($user_row['first_name']); ?>"></label><br>
+<label>Last name: <input type="text" name="last_name" value="<?php echo htmlspecialchars($user_row['last_name']); ?>"></label><br>
+<label>UCID: <input type="text" name="ucid" value="<?php echo htmlspecialchars($user_row['ucid']); ?>"></label><br>
+<input type="submit" value="Submit Changes">
+</form>
+<?php } ?>
 <h3>Attended Meetings</h3>
 <ol>
 <?php

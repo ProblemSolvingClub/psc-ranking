@@ -1,7 +1,7 @@
 <?php
 if (!defined('IN_PSC_RANKING_ADMIN')) die;
 $meeting_id = $_GET['meeting_id'];
-$meeting_sth = $db->prepare('SELECT date, kattis_contest_id FROM meeting WHERE id=?');
+$meeting_sth = $db->prepare('SELECT date, kattis_contest_id FROM meeting WHERE id=? AND deleted=0');
 $meeting_sth->execute(array($meeting_id));
 $meeting_row = $meeting_sth->fetch();
 if ($meeting_row === false) die('Invalid meeting ID');
@@ -10,8 +10,8 @@ $attended_user_ids = get_meeting_attendance($meeting_id);
 
 $get_kattis_username_sth = $db->prepare('SELECT username FROM site_account WHERE site_id=5 AND user_id=? LIMIT 1');
 
-echo "<h2>Meeting {$meeting_row['date']}</h2>\n";
-
+$date_str = date_with_dow($meeting_row['date']);
+echo "<h2>Meeting $date_str</h2>\n";
 if (!empty($meeting_row['kattis_contest_id'])) {
 	$kattis_contest_name_sth = $db->prepare('SELECT kattis_contest_name FROM kattis_contest WHERE kattis_contest_id=?');
 	$kattis_contest_name_sth->execute(array($meeting_row['kattis_contest_id']));
@@ -29,13 +29,29 @@ if (!empty($meeting_row['kattis_contest_id'])) {
 	}
 }
 ?>
+
+<h3>Alter Meeting</h3>
 <form method="post">
-<input type="hidden" name="action" value="update_meeting_attendance">
+<input type="hidden" name="action" value="change_meeting_properties">
 <input type="hidden" name="meeting_id" value="<?php echo $meeting_id; ?>">
-<table border=1>
+<label>Meeting date (yyyy-mm-dd): <input type="text" name="date" value="<?php echo $meeting_row['date']; ?>" size="10"></label><br>
+<label>Kattis contest ID (optional): <input type="text" name="kattis_contest_id" value="<?php echo $meeting_row['kattis_contest_id']; ?>"></label><br>
+<input type="submit" value="Submit Changes">
+</form>
+<form action="ranking-admin.php" method="post" onsubmit="return confirm('Are you sure?')">
+<input type="hidden" name="action" value="delete_meeting">
+<input type="hidden" name="meeting_id" value="<?php echo $meeting_id; ?>">
+<input type="submit" value="Delete Meeting">
+</form>
+
+<h3>Attendance</h3>
+<form onsubmit="updateMeetingAttendance('meeting-attendance-table', <?php echo $meeting_id; ?>); return false;">
+<input type=submit value="Save attendance">
+<table border=1 id="meeting-attendance-table">
 <tr><th>Name</th><th>Attended</th><th>Solved Problems</th></tr>
 <?php
 foreach ($users as $user) {
+	if ($user['deleted']) continue;
 	$attended = array_key_exists($user['id'], $attended_user_ids) && $attended_user_ids[$user['id']];
 	$checked = $attended ? ' checked' : '';
 	echo "<tr>";

@@ -13,6 +13,10 @@ define('LOG_ACTION_CHANGE_MEETING_ATTENDANCE', 7);
 define('LOG_ACTION_ADD_ACCOUNT', 8);
 define('LOG_ACTION_DELETE_ACCOUNT', 9);
 define('LOG_ACTION_CHANGE_SEMESTER_START_DATE', 10);
+define('LOG_ACTION_CHANGE_DELETED', 11);
+define('LOG_ACTION_DELETE_MEETING', 12);
+define('LOG_ACTION_ALTER_MEETING', 13);
+define('LOG_ACTION_CHANGE_FIRST_LAST_NAME', 14);
 
 date_default_timezone_set('America/Edmonton');
 
@@ -20,6 +24,89 @@ $db = new PDO('sqlite:/home/pscadmin/psc-ranking/ranking.sqlite3');
 session_start();
 $logged_in_user = require_login();
 load_globals();
+
+function action_bulk_user_modify() {
+	global $db, $logged_in_user, $status_message, $user_ids_to_index, $users;
+	if (!(isset($_POST['user_ids']) && isset($_POST['bulk_action']))) {
+		$status_message = 'Insufficent or invalid parameters';
+		return;
+	}
+	$bulk_action = $_POST['bulk_action'];
+	switch ($bulk_action) {
+	case 'make_admin':
+		$col = 'admin';
+		$value = 1;
+		$log_action = LOG_ACTION_CHANGE_ADMIN;
+		break;
+	case 'make_unadmin':
+		$col = 'admin';
+		$value = 0;
+		$log_action = LOG_ACTION_CHANGE_ADMIN;
+		break;
+	case 'make_official':
+		$col = 'unofficial';
+		$value = 0;
+		$log_action = LOG_ACTION_CHANGE_UNOFFICIAL;
+		break;
+	case 'make_unofficial':
+		$col = 'unofficial';
+		$value = 1;
+		$log_action = LOG_ACTION_CHANGE_UNOFFICIAL;
+		break;
+	case 'delete':
+		$col = 'deleted';
+		$value = 1;
+		$log_action = LOG_ACTION_CHANGE_DELETED;
+		break;
+	case 'undelete':
+		$col = 'deleted';
+		$value = 0;
+		$log_action = LOG_ACTION_CHANGE_DELETED;
+		break;
+	default:
+		$status_message = 'Invalid bulk_action';
+		return;
+	}
+	$sth = $db->prepare("UPDATE user SET $col=? WHERE id=?");
+	if (!$db->beginTransaction()) {
+		$status_message = 'Unable to begin transaction';
+		return;
+	}
+	$status_msgs = array();
+	$user_ids = explode(',', $_POST['user_ids']);
+	foreach ($user_ids as $user_id) {
+		if (!array_key_exists($user_id, $user_ids_to_index)) {
+			$status_msgs[] = 'Invalid user id ' . htmlspecialchars($user_id);
+			continue;
+		}
+		$user = $users[$user_ids_to_index[$user_id]];
+		if ($user[$col] == $value) continue;
+		$full_name = htmlspecialchars("{$user['first_name']} {$user['last_name']}");
+		if ($bulk_action == 'delete' && $user['admin']) {
+			$status_msgs[] = "Cannot delete admin $full_name";
+			continue;
+		}
+		if ($bulk_action != 'undelete' && $user['deleted']) {
+			$status_msgs[] = "Cannot perform action on deleted user $full_name";
+			continue;
+		}
+		if (!$sth->execute(array($value, $user_id))) {
+			$status_msgs[] = "Action failed for $full_name";
+			continue;
+		}
+		insert_log($logged_in_user['id'], $log_action, $user_id, null, $value);
+	}
+	if ($db->commit()) {
+		$status_message = 'Performed actions successfully';
+		if ($status_msgs) {
+			$status_message .= '<ul>';
+			foreach ($status_msgs as $msg) $status_message .= "<li>$msg</li>";
+			$status_message .= '</ul>';
+		}
+	} else {
+		$status_message = 'Failed to commit transaction';
+	}
+}
 
 function action_add_account() {
 	global $db, $logged_in_user, $status_message;
@@ -90,6 +177,56 @@ function action_add_meeting() {
 	}
 }
 
+function action_change_meeting_properties() {
+	global $db, $logged_in_user, $status_message;
+	if (!(isset($_POST['meeting_id'])) ||!(isset($_POST['date'])) || !preg_match('/^[0-9]{4}\-[0-9]{2}\-[0-9]{2}$/', $_POST['date'])) {
+		$status_message = 'Invalid parameters.';
+		return;
+	}
+	$kattis_contest_id = null;
+	if (isset($_POST['kattis_contest_id']) && !empty($_POST['kattis_contest_id'])) {
+		$kattis_contest_id = $_POST['kattis_contest_id'];
+		if (!preg_match('/^[a-z0-9]+$/', $kattis_contest_id)) {
+			$status_message = 'Invalid Kattis contest ID.';
+			return;
+		}
+	}
+	$meeting_id = $_POST['meeting_id'];
+
+	$get_sth = $db->prepare('SELECT date, kattis_contest_id FROM meeting WHERE id=? AND deleted=0');
+	$get_sth->execute(array($meeting_id));
+	$meeting_row = $get_sth->fetch();
+	if ($meeting_row === false) die('Invalid meeting ID');
+	if ($meeting_row['date'] == $_POST['date'] && $meeting_row['kattis_contest_id'] == $kattis_contest_id) {
+		$status_message = 'No changes made.';
+		return;
+	}
+
+	$sth = $db->prepare('UPDATE meeting SET date=?, kattis_contest_id=? WHERE id=?');
+	if ($sth->execute(array($_POST['date'], $kattis_contest_id, $meeting_id)) && $sth->rowCount() == 1) {
+		insert_log($logged_in_user['id'], LOG_ACTION_ALTER_MEETING, null, $meeting_id, $_POST['date'] . ':' . $kattis_contest_id);
+		$status_message = 'Meeting properties changed successfully.';
+	} else {
+		$status_message = 'Unable to change meeting properties.';
+	}
+}
+
+function action_delete_meeting() {
+	global $db, $logged_in_user, $status_message;
+	if (!isset($_POST['meeting_id'])) {
+		$status_message = 'Insufficent parameters';
+		return;
+	}
+	$meeting_id = $_POST['meeting_id'];
+	$sth = $db->prepare('UPDATE meeting SET deleted=1 WHERE id=?');
+	if ($sth->execute(array($meeting_id)) && $sth->rowCount() == 1) {
+		insert_log($logged_in_user['id'], LOG_ACTION_DELETE_MEETING, null, $meeting_id, null);
+		$status_message = 'Meeting deleted successfully.';
+	} else {
+		$status_message = 'Unable to delete meeting.';
+	}
+}
+
 function action_add_user() {
 	global $db, $logged_in_user, $status_message;
 	if (!(isset($_POST['first_name']) && isset($_POST['last_name']))) {
@@ -112,47 +249,54 @@ function action_add_user() {
 		$status_message = 'Unable to add user.';
 	}
 }
-function action_change_ucid() {
-	global $db, $logged_in_user, $status_message;
-	if (!isset($_POST['user_id']) || !isset($_POST['ucid']) || !preg_match('/^[0-9]{6,8}$/', $_POST['ucid'])) {
-		$status_message = 'Insufficent or invalid parameters.';
-		return;
-	}
-	$user_id = $_POST['user_id'];
-	$ucid = $_POST['ucid'];
 
-	// Perform change
-	$sth = $db->prepare("UPDATE user SET ucid=? WHERE id=?");
-	if ($sth->execute(array($ucid, $user_id)) && $sth->rowCount() == 1) {
-		insert_log($logged_in_user['id'], LOG_ACTION_CHANGE_UCID, $user_id, null, $ucid);
-		$status_message = 'User UCID changed successfully.';
-	} else {
-		$status_message = 'Unable to change user UCID.';
-	}
-}
-
-function action_toggle_unofficial_admin() {
+function action_change_user_properties() {
 	global $db, $logged_in_user, $status_message, $user_ids_to_index, $users;
-	$cols = array('Toggle Admin' => 'admin', 'Toggle Unofficial' => 'unofficial');
-	if (!isset($_POST['user_id']) || !isset($_POST['submit']) || !array_key_exists($_POST['submit'], $cols)) {
-		$status_message = 'Insufficent parameters';
+	if (!isset($_POST['user_id']) || !isset($_POST['first_name']) || !isset($_POST['last_name'])) {
+		$status_message = 'Invalid parameters.';
 		return;
 	}
-	$user_id = $_POST['user_id'];
-	$col = $cols[$_POST['submit']];
-
-	// Perform toggle (not thread safe)
-	$new_value = $users[$user_ids_to_index[$user_id]][$col] ? 0 : 1;
-	$sth = $db->prepare("UPDATE user SET $col=? WHERE id=?");
-	if ($sth->execute(array($new_value, $user_id)) && $sth->rowCount() == 1) {
-		if ($col == 'admin') {
-			insert_log($logged_in_user['id'], LOG_ACTION_CHANGE_ADMIN, $user_id, null, $new_value);
-		} else if ($col == 'unofficial') {
-			insert_log($logged_in_user['id'], LOG_ACTION_CHANGE_UNOFFICIAL, $user_id, null, $new_value);
+	$first_name = trim($_POST['first_name']);
+	$last_name = trim($_POST['last_name']);
+	if (empty($first_name) || empty($last_name)) {
+		$status_message = 'Must provide first and last name';
+		return;
+	}
+	$ucid = null;
+	if (isset($_POST['ucid']) && !empty($_POST['ucid'])) {
+		$ucid = $_POST['ucid'];
+		if (!preg_match('/^[0-9]{6,8}$/', $ucid)) {
+			$status_message = 'Invalid UCID';
+			return;
 		}
-		$status_message = 'User flag toggled successfully.';
+	}
+	$user_id = $_POST['user_id'];
+
+	if (!array_key_exists($user_id, $user_ids_to_index)) {
+		$status_message = 'Invalid user id.';
+		return;
+	}
+	$user = $users[$user_ids_to_index[$user_id]];
+	if ($user['first_name'] == $first_name && $user['last_name'] == $last_name && $user['ucid'] == $ucid) {
+		$status_message = 'No changes made.';
+		return;
+	}
+	if ($user['deleted']) {
+		$status_message = 'Cannot modify deleted user.';
+		return;
+	}
+
+	$sth = $db->prepare('UPDATE user SET first_name=?, last_name=?, ucid=? WHERE id=?');
+	if ($sth->execute(array($first_name, $last_name, $ucid, $user_id)) && $sth->rowCount() == 1) {
+		if ($user['first_name'] != $first_name || $user['last_name'] != $last_name) {
+			insert_log($logged_in_user['id'], LOG_ACTION_CHANGE_FIRST_LAST_NAME, $user_id, null, "$first_name $last_name");
+		}
+		if ($user['ucid'] != $ucid) {
+			insert_log($logged_in_user['id'], LOG_ACTION_CHANGE_UCID, $user_id, null, $ucid);
+		}
+		$status_message = 'User properties changed successfully.';
 	} else {
-		$status_message = 'Unable to toggle user flag.';
+		$status_message = 'Unable to change user properties.';
 	}
 }
 
@@ -169,36 +313,48 @@ function get_meeting_attendance($meeting_id) {
 
 function action_update_meeting_attendance() {
 	global $db, $logged_in_user, $status_message;
-	if (!isset($_POST['meeting_id'])) {
+	if (!isset($_POST['meeting_id']) || !isset($_POST['attendance'])) {
 		$status_message = 'Insufficent parameters';
 		return;
 	}
 	$meeting_id = $_POST['meeting_id'];
 
+	if (!$db->beginTransaction()) {
+		$status_message = 'Unable to begin transaction';
+		return;
+	}
+
 	// First, get existing attendance
 	$attended_user_ids = get_meeting_attendance($meeting_id);
-
-	// Get all user IDs
-	$users = $db->query('SELECT id FROM user')->fetchAll();
 
 	// Next, insert or delete attendance if different
 	$insert_sth = $db->prepare('INSERT INTO meeting_attended (meeting_id, user_id) VALUES (?,?)');
 	$delete_sth = $db->prepare('DELETE FROM meeting_attended WHERE meeting_id=? AND user_id=?');
-	foreach ($users as $user) {
-		$attended = array_key_exists($user['id'], $_POST) && !empty($_POST[$user['id']]);
-		$attended_prev_value = array_key_exists($user['id'], $attended_user_ids);
+	$attendance = explode(',', $_POST['attendance']);
+	foreach ($attendance as $attendance_str) {
+		if (!preg_match('/^(\d+)=([01])$/', $attendance_str, $matches)) {
+			$status_message = 'Invalid attendance str.';
+			return;
+		}
+		$user_id = $matches[1];
+		$attended = $matches[2] === '1';
+		$attended_prev_value = array_key_exists($user_id, $attended_user_ids);
 		if ($attended != $attended_prev_value) {
 			// Insert new attendance value
 			$attended_value = $attended ? 1 : 0;
 			$sth = $attended_value ? $insert_sth : $delete_sth;
-			if (!$sth->execute(array($meeting_id, $user['id']))) {
+			if (!$sth->execute(array($meeting_id, $user_id))) {
 				$status_message = 'Unexpected error updating attendance.';
 				return;
 			}
-			insert_log($logged_in_user['id'], LOG_ACTION_CHANGE_MEETING_ATTENDANCE, $user['id'], $meeting_id, $attended_value);
+			insert_log($logged_in_user['id'], LOG_ACTION_CHANGE_MEETING_ATTENDANCE, $user_id, $meeting_id, $attended_value);
 		}
 	}
-	$status_message = 'Attendance updated successfully.';
+	if ($db->commit()) {
+		$status_message = 'Attendance updated successfully.';
+	} else {
+		$status_message = 'Failed to update attendance.';
+	}
 }
 
 function action_change_semester_start_date() {
@@ -224,6 +380,13 @@ function insert_log($user_id, $action, $target_user_id=null, $target_meeting_id=
 	}
 }
 
+function date_with_dow($date_str) {
+	if ($parsed_date = date_create($date_str)) {
+		$date_str = date_format($parsed_date, 'Y-m-d (D)');
+	}
+	return $date_str;
+}
+
 function load_globals() {
 	global $db, $sites, $user_ids_to_index, $users;
 	// Sites.
@@ -235,7 +398,7 @@ function load_globals() {
 
 	// Users with scores.
 	// [ { id, firstName, lastName, totalSolved, siteSolved: [{siteId: solved}] } ]
-	$users_sql = 'SELECT id, first_name, last_name, ucid, unofficial, admin, (SELECT COUNT(*) FROM meeting_attended WHERE user_id=id) AS meeting_count, (SELECT COUNT(*) FROM kattis_contest_solved WHERE kattis_username IN (SELECT username FROM site_account WHERE site_id=5 AND user_id=id)) AS bonus_count FROM user';
+	$users_sql = 'SELECT id, first_name, last_name, ucid, unofficial, admin, deleted, (SELECT COUNT(*) FROM meeting_attended WHERE user_id=id) AS meeting_count, (SELECT COUNT(*) FROM kattis_contest_solved WHERE kattis_username IN (SELECT username FROM site_account WHERE site_id=5 AND user_id=id)) AS bonus_count FROM user';
 	$users = $db->query($users_sql)->fetchAll();
 	// Sort by reverse order of Total
 	uasort($users, function($a, $b) {
@@ -251,7 +414,7 @@ function load_globals() {
 
 function require_login() {
 	global $db;
-	$service_url = 'http://psc.cpsc.ucalgary.ca/ranking-admin.php';
+	$service_url = "http://{$_SERVER['HTTP_HOST']}/ranking-admin.php";
 	if (isset($_GET['logout'])) {
 		// Destroy session
 		unset($_SESSION['psc-ranking-user-id']);
@@ -307,12 +470,14 @@ function require_login() {
 if (isset($_POST['action'])) {
 	if ($_POST['action'] == 'add_account') action_add_account();
 	elseif ($_POST['action'] == 'add_meeting') action_add_meeting();
+	elseif ($_POST['action'] == 'delete_meeting') action_delete_meeting();
+	elseif ($_POST['action'] == 'change_meeting_properties') action_change_meeting_properties();
 	elseif ($_POST['action'] == 'add_user') action_add_user();
-	elseif ($_POST['action'] == 'change_ucid') action_change_ucid();
+	elseif ($_POST['action'] == 'change_user_properties') action_change_user_properties();
 	elseif ($_POST['action'] == 'delete_account') action_delete_account();
-	elseif ($_POST['action'] == 'toggle_unofficial_admin') action_toggle_unofficial_admin();
 	elseif ($_POST['action'] == 'update_meeting_attendance') action_update_meeting_attendance();
 	elseif ($_POST['action'] == 'change_semester_start_date') action_change_semester_start_date();
+	elseif ($_POST['action'] == 'bulk_user_modify') action_bulk_user_modify();
 	else $status_message = 'Invalid action.';
 }
 
@@ -331,9 +496,82 @@ body, input, select {
 .form_panel input[type="text"] {
 	width: 80px;
 }
+.inline_list {
+	padding: 0;
+}
+.inline_list li {
+	display: inline;
+}
 </style>
+<script>
+function checkAll(table_id, checked) {
+	var inputs = document.getElementById(table_id).getElementsByTagName('input');
+	for (var i = 0; i < inputs.length; i++) {
+		if (inputs[i].type == 'checkbox' && inputs[i].name) {
+			inputs[i].checked = checked;
+		}
+	}
+}
+function bulkUserModify(table_id, bulk_action) {
+	var user_ids = [];
+	var inputs = document.getElementById(table_id).getElementsByTagName('input');
+	for (var i = 0; i < inputs.length; i++) {
+		if (inputs[i].type == 'checkbox' && inputs[i].name && inputs[i].checked) {
+			user_ids.push(inputs[i].name);
+		}
+	}
+	if (user_ids.length === 0) return;
+	if (!confirm("Are you sure? Perform " + bulk_action + 
+		" for "+ user_ids.length + " users?")) return;
+	var form = document.getElementById('bulk_user_modify_form');
+	form.bulk_action.value = bulk_action;
+	form.user_ids.value = user_ids.join(',');
+	form.submit();
+}
+function deleteAcct(user_id, full_name, site_id, site_name, username) {
+	if (!confirm("Are you sure? Delete " + site_name + 
+		" account "+username+
+		" for user "+full_name+" ("+user_id+")")) return;
+	var form = document.getElementById('delete_account_form');
+	form.user_id.value = user_id;
+	form.site_id.value = site_id;
+	form.username.value = username;
+	form.submit();
+}
+function updateMeetingAttendance(table_id, meeting_id) {
+	var attendance = [];
+	var inputs = document.getElementById(table_id).getElementsByTagName('input');
+	for (var i = 0; i < inputs.length; i++) {
+		if (inputs[i].type == 'checkbox' && inputs[i].name) {
+			var val = inputs[i].checked ? '1' : '0';
+			attendance.push(inputs[i].name + '=' + val);
+		}
+	}
+	if (attendance.length === 0) return;
+	var form = document.getElementById('update_meeting_attendance_form');
+	form.meeting_id.value = meeting_id;
+	form.attendance.value = attendance.join(',');
+	form.submit();
+}
+</script>
 </head>
 <body>
+<form method="post" id="bulk_user_modify_form">
+<input type="hidden" name="action" value="bulk_user_modify">
+<input type="hidden" name="bulk_action">
+<input type="hidden" name="user_ids">
+</form>
+<form method="post" id="delete_account_form">
+<input type="hidden" name="action" value="delete_account">
+<input type="hidden" name="user_id">
+<input type="hidden" name="site_id">
+<input type="hidden" name="username">
+</form>
+<form method="post" id="update_meeting_attendance_form">
+<input type="hidden" name="action" value="update_meeting_attendance">
+<input type="hidden" name="meeting_id">
+<input type="hidden" name="attendance">
+</form>
 <?php
 if (isset($status_message)) {
 	echo "<div style=\"padding: 5px; border: 3px inset green;\">$status_message</div>";
@@ -342,6 +580,7 @@ if (isset($status_message)) {
 <h1><a href="ranking-admin.php">PSC Ranking Admin</a></h1>
 <p>
 Welcome <?php echo "{$logged_in_user['first_name']} {$logged_in_user['last_name']}"; ?>!
+<a href="ranking-admin.php?deleted_user_list">View deleted users</a>
 <a href="ranking-admin.php?log">View log</a>
 <a href="ranking-admin.php?logout">Log out</a>
 </p>
@@ -352,6 +591,10 @@ if (isset($_GET['meeting_id'])) {
 	require('ranking-admin-user.php');
 } else if (isset($_GET['log'])) {
 	require('ranking-admin-log.php');
+} else if (isset($_GET['deleted_user_list'])) {
+	define('USER_LIST_DELETED', true);
+	echo '<h2>Deleted Users</h2>';
+	require('ranking-admin-user-list.php');
 } else {
 	require('ranking-admin-main.php');
 }

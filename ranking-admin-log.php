@@ -37,6 +37,21 @@ foreach ($db->query($log_sql) as $log_row) {
 		case LOG_ACTION_DELETE_ACCOUNT:
 			$text = "deleted account {$log_row['value']} for user {$log_row['target_user_id']}";
 			break;
+		case LOG_ACTION_CHANGE_DELETED:
+			$acttext = $log_row['value'] ? 'deleted' : 'undeleted';
+			$text = "$acttext user {$log_row['target_user_id']}";
+			break;
+		case LOG_ACTION_DELETE_MEETING:
+			$text = "deleted meeting {$log_row['target_meeting_id']}";
+			break;
+		case LOG_ACTION_ALTER_MEETING:
+			$text = "altered meeting {$log_row['target_meeting_id']} with properties " .
+				htmlspecialchars($log_row['value']);
+			break;
+		case LOG_ACTION_CHANGE_FIRST_LAST_NAME:
+			$text = "changed user {$log_row['target_user_id']} first/last name to " .
+				htmlspecialchars($log_row['value']);
+			break;
 		default:
 			$text = "performed unknown action";
 			break;
