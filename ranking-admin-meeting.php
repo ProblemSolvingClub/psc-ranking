@@ -6,7 +6,7 @@ $meeting_sth->execute(array($meeting_id));
 $meeting_row = $meeting_sth->fetch();
 if ($meeting_row === false) die('Invalid meeting ID');
 
-$attended_user_ids = get_meeting_attendance($meeting_id);
+$attendance = get_meeting_attendance($meeting_id);
 
 $get_kattis_username_sth = $db->prepare('SELECT username FROM site_account WHERE site_id=5 AND user_id=? LIMIT 1');
 
@@ -45,18 +45,25 @@ if (!empty($meeting_row['kattis_contest_id'])) {
 </form>
 
 <h3>Attendance</h3>
+<p>Add Bonus can be used to manually credit the user with bonus problems solved. It can also be negative to remove credit.</p>
 <form onsubmit="updateMeetingAttendance('meeting-attendance-table', <?php echo $meeting_id; ?>); return false;">
 <input type=submit value="Save attendance">
 <table border=1 id="meeting-attendance-table">
-<tr><th>Name</th><th>Attended</th><th>Solved Problems</th></tr>
+<tr><th>Name</th><th>Attended</th><th>Add<br>Bonus</th><th>Solved Problems</th></tr>
 <?php
 foreach ($users as $user) {
 	if ($user['deleted']) continue;
-	$attended = array_key_exists($user['id'], $attended_user_ids) && $attended_user_ids[$user['id']];
+	$attended = false;
+	$bonus = '';
+	if (array_key_exists($user['id'], $attendance)) {
+		$attended = true;
+		if ($attendance[$user['id']]) $bonus = $attendance[$user['id']];
+	}
 	$checked = $attended ? ' checked' : '';
 	echo "<tr>";
 	echo "<td>{$user['first_name']} {$user['last_name']}</td>";
 	echo "<td><input type=checkbox name=\"{$user['id']}\"$checked></td>";
+	echo "<td><input type=number style=\"width: 30px;\" name=\"{$user['id']}-bonus\" value=\"$bonus\"></td>";
 	echo "<td>";
 	$get_kattis_username_sth->execute(array($user['id']));
 	if ($row = $get_kattis_username_sth->fetch()) {

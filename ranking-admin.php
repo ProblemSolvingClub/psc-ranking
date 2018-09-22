@@ -302,22 +302,27 @@ function action_change_user_properties() {
 
 function get_meeting_attendance($meeting_id) {
 	global $db;
-	$attendance_sth = $db->prepare('SELECT user_id FROM meeting_attended WHERE meeting_id=?');
+	$attendance_sth = $db->prepare('SELECT user_id, added_bonus_problems FROM meeting_attended WHERE meeting_id=?');
 	$attendance_sth->execute(array($meeting_id));
 	$attended_user_ids = array();
 	while ($row = $attendance_sth->fetch()) {
-		$attended_user_ids[$row['user_id']] = true;
+		$attended_user_ids[$row['user_id']] = $row['added_bonus_problems'];
 	}
 	return $attended_user_ids;
 }
 
 function action_update_meeting_attendance() {
-	global $db, $logged_in_user, $status_message;
+	global $db, $logged_in_user, $status_message, $user_ids_to_index;
 	if (!isset($_POST['meeting_id']) || !isset($_POST['attendance'])) {
 		$status_message = 'Insufficent parameters';
 		return;
 	}
 	$meeting_id = $_POST['meeting_id'];
+	$attendance = json_decode($_POST['attendance'], true);
+	if (!is_array($attendance)) {
+		$status_message = 'Invalid attendance str.';
+		return;
+	}
 
 	if (!$db->beginTransaction()) {
 		$status_message = 'Unable to begin transaction';
@@ -325,29 +330,36 @@ function action_update_meeting_attendance() {
 	}
 
 	// First, get existing attendance
-	$attended_user_ids = get_meeting_attendance($meeting_id);
+	$old_attendance = get_meeting_attendance($meeting_id);
 
 	// Next, insert or delete attendance if different
-	$insert_sth = $db->prepare('INSERT INTO meeting_attended (meeting_id, user_id) VALUES (?,?)');
+	$insert_sth = $db->prepare('INSERT OR REPLACE INTO meeting_attended (meeting_id, user_id, added_bonus_problems) VALUES (?,?,?)');
 	$delete_sth = $db->prepare('DELETE FROM meeting_attended WHERE meeting_id=? AND user_id=?');
-	$attendance = explode(',', $_POST['attendance']);
-	foreach ($attendance as $attendance_str) {
-		if (!preg_match('/^(\d+)=([01])$/', $attendance_str, $matches)) {
+	foreach ($attendance as $user_id => $info) {
+		if (!(array_key_exists($user_id, $user_ids_to_index)
+			&& array_key_exists('attended', $info)
+			&& is_bool($info['attended'])
+			&& array_key_exists('added_bonus_problems', $info))) {
 			$status_message = 'Invalid attendance str.';
 			return;
 		}
-		$user_id = $matches[1];
-		$attended = $matches[2] === '1';
-		$attended_prev_value = array_key_exists($user_id, $attended_user_ids);
-		if ($attended != $attended_prev_value) {
+		$attended = $info['attended'];
+		$added_bonus_problems = (int) $info['added_bonus_problems'];
+		$attended_prev_value = array_key_exists($user_id, $old_attendance);
+		if ($attended != $attended_prev_value || ($attended && $old_attendance[$user_id] != $added_bonus_problems)) {
 			// Insert new attendance value
-			$attended_value = $attended ? 1 : 0;
-			$sth = $attended_value ? $insert_sth : $delete_sth;
-			if (!$sth->execute(array($meeting_id, $user_id))) {
+			if ($info['attended']) {
+				$result = $insert_sth->execute(array($meeting_id, $user_id, $added_bonus_problems));
+			} else {
+				$result = $delete_sth->execute(array($meeting_id, $user_id));
+			}
+			if (!$result) {
 				$status_message = 'Unexpected error updating attendance.';
 				return;
 			}
-			insert_log($logged_in_user['id'], LOG_ACTION_CHANGE_MEETING_ATTENDANCE, $user_id, $meeting_id, $attended_value);
+			$log_value = $info['attended'] ? '1' : '0';
+			if ($info['attended'] && $info['added_bonus_problems']) $log_value .= '+' . $info['added_bonus_problems'];
+			insert_log($logged_in_user['id'], LOG_ACTION_CHANGE_MEETING_ATTENDANCE, $user_id, $meeting_id, $log_value);
 		}
 	}
 	if ($db->commit()) {
@@ -539,18 +551,22 @@ function deleteAcct(user_id, full_name, site_id, site_name, username) {
 	form.submit();
 }
 function updateMeetingAttendance(table_id, meeting_id) {
-	var attendance = [];
+	var attendance = {};
 	var inputs = document.getElementById(table_id).getElementsByTagName('input');
 	for (var i = 0; i < inputs.length; i++) {
 		if (inputs[i].type == 'checkbox' && inputs[i].name) {
-			var val = inputs[i].checked ? '1' : '0';
-			attendance.push(inputs[i].name + '=' + val);
+			attendance[inputs[i].name] = {'attended': inputs[i].checked};
+		}
+	}
+	for (var i = 0; i < inputs.length; i++) {
+		if (inputs[i].type == 'number' && inputs[i].name) {
+			attendance[inputs[i].name.split('-')[0]].added_bonus_problems = inputs[i].value;
 		}
 	}
 	if (attendance.length === 0) return;
 	var form = document.getElementById('update_meeting_attendance_form');
 	form.meeting_id.value = meeting_id;
-	form.attendance.value = attendance.join(',');
+	form.attendance.value = JSON.stringify(attendance);
 	form.submit();
 }
 </script>

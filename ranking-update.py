@@ -21,9 +21,9 @@ def update_solved(site_id, username, solved):
 def get_http(url):
     return urllib.request.urlopen(url, timeout=10).read() # 10 second timeout
 
-def scrape_codeforces(site_id, username_userid):
+def scrape_codeforces(site_id, usernames):
     # I don't see a better way than scanning all submissions of the user
-    for username in username_userid.keys():
+    for username in usernames:
         body_bytes = get_http('http://www.codeforces.com/api/user.status?handle=%s' % username)
         doc = json.loads(body_bytes.decode('utf-8'))
         solved = set()
@@ -32,20 +32,19 @@ def scrape_codeforces(site_id, username_userid):
             if obj['verdict'] == 'OK': solved.add((obj['problem']['contestId'], obj['problem']['index']))
         update_solved(site_id, username, len(solved))
 
-def scrape_codechef(site_id, username_userid):
-    for username in username_userid.keys():
+def scrape_codechef(site_id, usernames):
+    for username in usernames:
         tree = lxml.html.fromstring(get_http('https://www.codechef.com/users/%s' % username))
         solved = tree.cssselect("#problem_stats tr:nth-child(2) td")[0].text
         update_solved(site_id, username, solved)
 
-def scrape_coj(site_id, username_userid):
-    for username in username_userid.keys():
+def scrape_coj(site_id, usernames):
+    for username in usernames:
         tree = lxml.html.fromstring(get_http('http://coj.uci.cu/user/useraccount.xhtml?username=%s' % username))
         solved = tree.cssselect("div.panel-heading:contains('Solved problems') span.badge")[0].text
         update_solved(site_id, username, solved)
 
-def scrape_kattis(site_id, username_userid):
-
+def scrape_kattis(site_id, usernames):
     # First, get users who are listed as University of Calgary
     # This reduces the number of requests needed
     req = urllib.request.Request('https://open.kattis.com/universities/ucalgary.ca')
@@ -55,12 +54,12 @@ def scrape_kattis(site_id, username_userid):
     for tr in solved:
         username = tr.cssselect('a')[0].get('href').split('/')[-1]
         score = float(tr.cssselect('td:last-child')[0].text)
-        if username in username_userid.keys():
+        if username in usernames:
             update_solved(site_id, username, score)
-            username_userid.pop(username)
+            usernames.remove(username)
 
     # Then get other users
-    for username in username_userid.keys():
+    for username in usernames:
         req = urllib.request.Request('https://open.kattis.com/users/%s' % username)
         req.add_header('User-Agent', kattis_user_agent)
         try:
@@ -70,21 +69,21 @@ def scrape_kattis(site_id, username_userid):
         except urllib.error.HTTPError:
             logging.exception('Failed to fetch Kattis user "%s"', username)
 
-def scrape_poj(site_id, username_userid):
-    for username in username_userid.keys():
+def scrape_poj(site_id, usernames):
+    for username in usernames:
         tree = lxml.html.fromstring(get_http('http://poj.org/userstatus?user_id=%s' % username))
         solved = tree.cssselect("tr:contains('Solved:') a")[0].text
         update_solved(site_id, username, solved)
 
-def scrape_spoj(site_id, username_userid):
-    for username in username_userid.keys():
+def scrape_spoj(site_id, usernames):
+    for username in usernames:
         tree = lxml.html.fromstring(get_http('http://www.spoj.com/users/%s/' % username))
         solved = tree.cssselect('.profile-info-data-stats dd')[0].text
         update_solved(site_id, username, solved)
 
-def scrape_uva(base_url, site_id, username_userid):
+def scrape_uva(base_url, site_id, usernames):
     # uhunt has a weird API where it returns a list of bitsets of solved problems
-    body_bytes = get_http('%s/api/solved-bits/%s' % (base_url, ','.join(username_userid.keys())))
+    body_bytes = get_http('%s/api/solved-bits/%s' % (base_url, ','.join(usernames)))
     doc = json.loads(body_bytes.decode('utf-8'))
     for obj in doc:
         count = 0
@@ -111,21 +110,25 @@ def parse_kattis_contest_html(html):
         if not colspan: colspan = '1'
         col += int(colspan)
 
-    solved = {}
+    solved = collections.defaultdict(list)
     for tr in tree.cssselect('#standings tr'):
         user_a = tr.cssselect('a')
         if not user_a: continue # not a user row
-        user_href = user_a[0].get('href')
-        user_match = re.match(r'^/users/(.+)$', user_href)
-        if not user_match: continue # not a user row
-        kattis_user = user_href.split('/')[-1]
+        usernames = [] # Rows can have more than one user.
+        for a in user_a:
+            user_href = a.get('href')
+            user_match = re.match(r'^/users/(.+)$', user_href)
+            if not user_match: continue
+            usernames.append(user_match.group(1))
+        if not usernames: continue
         col = 0
         for td in tr.cssselect('td'):
             if col in cell_to_problem_id:
                 problem_id = cell_to_problem_id[col]
                 class_attr = td.get('class')
                 if class_attr and 'solved' in class_attr: # NOTE: This does not do a proper class check
-                    solved.setdefault(kattis_user, []).append(problem_id)
+                    for username in usernames:
+                        solved[username].append(problem_id)
             colspan = td.get('colspan')
             if not colspan: colspan = '1'
             col += int(colspan)
@@ -148,11 +151,12 @@ supported_sites = [
 # Scrape users on sites
 for site in supported_sites:
     print('Processing %s' % site.name)
-    username_userid = {}
-    for row in db.execute('SELECT user_id, username FROM site_account WHERE site_id=?', (site.id,)):
-        username_userid[str(row['username'])] = row['user_id']
+    usernames = set()
+    # Note: Primary key is (site_id, username).
+    for row in db.execute('SELECT username FROM site_account WHERE site_id=?', (site.id,)):
+        usernames.add(row['username'])
     try:
-        site.scrape_func(site.id, username_userid)
+        site.scrape_func(site.id, usernames)
     except:
         logging.exception('Fatal error occured while scraping %s', site.name)
 
